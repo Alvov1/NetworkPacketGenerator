@@ -11,9 +11,12 @@ use pnet::packet::tcp::TcpOption;
 use pnet::packet::Packet;
 use pnet::util::MacAddr;
 use std::env;
+use glib::GString;
 
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Button, gdk};
+use crate::gdk::gio;
+use crate::gdk::glib::clone;
 
 fn list_ifaces(interfaces: &Vec<NetworkInterface>) {
     for iface in interfaces {
@@ -104,39 +107,82 @@ fn send_icmp_2(sender: &mut Box<dyn DataLinkSender>) {
     sender.send_to(pkt.packet(), None).unwrap().unwrap();
 }
 
-fn choose_iface() -> NetworkInterface {
-    let interfaces = datalink::interfaces();
-    for interface in &interfaces {
-        let name = &interface.name;
-        let mac = interface.mac.unwrap_or(MacAddr(0, 0, 0, 0, 0, 0));
-        let desc = &interface.description;
-        println!("{}: {}, {}", name, desc, mac);
-    }
 
-    interfaces.into_iter().last().unwrap_or_else(|| panic!("Iterating over interfaces failed."))
+fn send_packet(iface: &NetworkInterface) {
+    println!("Package is sent through interface {}.", iface.name);
+}
+
+fn generate_first_section() -> gtk::Box {
+    let result = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .margin_top(24)
+        .margin_bottom(24)
+        .margin_start(24)
+        .margin_end(24)
+        .halign(gtk::Align::Center)
+        .valign(gtk::Align::Center)
+        .spacing(24)
+        .build();
+
+    /* Left "Interface:" label. */
+    let interfaces_title = gtk::Label::builder()
+        .label("Interface:")
+        .halign(gtk::Align::Start)
+        .build();
+    interfaces_title.add_css_class("ifaces-title");
+    result.append(&interfaces_title);
+
+    /* Dropdown list in the middle. */
+    let interfaces = datalink::interfaces();
+    let iface_list = gtk::ComboBoxText::new();
+    interfaces.iter().for_each(|iface| {
+        iface_list.append(Some(&*iface.name), &*iface.name);
+    });
+    iface_list.set_active(Some(0));
+    result.append(&iface_list);
+
+    /* Sending button on the right. */
+    let main_button = gtk::Button::with_label("Generate");
+    main_button.connect_clicked(move |button| {
+        let iface_name = iface_list.active_text().unwrap();
+        for iface in &interfaces {
+            if iface.name == iface_name { send_packet(iface); break; }
+        }
+    });
+    result.append(&main_button);
+
+    result
+}
+fn generate_second_section() -> gtk::Box {
+    let result = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .margin_top(24)
+        .margin_bottom(24)
+        .margin_start(24)
+        .margin_end(24)
+        .halign(gtk::Align::Center)
+        .valign(gtk::Align::Center)
+        .spacing(24)
+        .build();
+
+    let ip_button = gtk::CheckButton::with_label("IP");
+    let icmp_button = gtk::CheckButton::with_label("ICMP");
+    let tcp_button = gtk::CheckButton::with_label("TCP");
+    let udp_button = gtk::CheckButton::with_label("UDP");
+
+    tcp_button.set_group(Some(&udp_button));
+    icmp_button.set_group(Some(&tcp_button));
+    ip_button.set_group(Some(&icmp_button));
+
+    result.append(&ip_button);
+    result.append(&icmp_button);
+    result.append(&tcp_button);
+    result.append(&udp_button);
+
+    result
 }
 
 fn main() {
-    // choose_iface();
-
-    // //trace_macros!(true);
-    // let if_name = env::args()
-    //     .nth(1)
-    //     .expect("Usage: ./sendpacket <interface name>");
-    //
-    // let interfaces = datalink::interfaces();
-    // let interface = interfaces
-    //     .into_iter()
-    //     .filter(|iface: &NetworkInterface| iface.name == if_name)
-    //     .next()
-    //     .unwrap_or_else(|| panic!("No such network interface: {}", if_name));
-    // //
-    // let (mut sender, mut _receiver) = match datalink::channel(&interface, Default::default()) {
-    //     Ok(Ethernet(tx, rx)) => (tx, rx),
-    //     Ok(_) => panic!("packetdump: unhandled channel type"),
-    //     Err(e) => panic!("packetdump: unable to create channel: {}", e),
-    // };
-
     let application = Application::builder()
         .application_id("com.example.Project")
         .build();
@@ -144,17 +190,29 @@ fn main() {
     application.connect_activate(|app| {
         let window = ApplicationWindow::builder()
             .application(app)
-            .title("First GTK Program")
+            .title("Network Packet Generator")
             .default_width(350)
             .default_height(70)
             .build();
 
-        let button = Button::with_label("Click me!");
-        button.connect_clicked(|_| {
-            eprintln!("Clicked!");
-        });
-        window.set_child(Some(&button));
+        let main_container = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .margin_top(24)
+            .margin_bottom(24)
+            .margin_start(24)
+            .margin_end(24)
+            .halign(gtk::Align::Center)
+            .valign(gtk::Align::Center)
+            .spacing(24)
+            .build();
 
+        let first_section = generate_first_section();
+        main_container.append(&first_section);
+
+        let second_section = generate_second_section();
+        main_container.append(&second_section);
+
+        window.set_child(Some(&main_container));
         window.show();
     });
 
