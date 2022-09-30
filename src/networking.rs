@@ -3,8 +3,7 @@ extern crate pnet;
 
 use packet_builder::payload::PayloadData;
 use packet_builder::*;
-use pnet::datalink::Channel::Ethernet;
-use pnet::datalink::{self, DataLinkSender, NetworkInterface};
+use pnet::datalink::{DataLinkSender, NetworkInterface};
 use pnet::packet::icmp::IcmpTypes;
 use pnet::packet::tcp::TcpFlags;
 use pnet::packet::tcp::TcpOption;

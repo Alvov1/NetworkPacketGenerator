@@ -1,6 +1,7 @@
-use pnet::datalink::DataLinkSender;
-use pnet::util::MacAddr;
 use pnet::packet::ethernet::{ MutableEthernetPacket };
+use pnet::datalink::DataLinkSender;
+use pnet::packet::Packet;
+use pnet::util::MacAddr;
 
 use crate::ipv4::IPv4Packet;
 
@@ -34,6 +35,8 @@ impl EthernetFrame {
         new_packet.set_source(header.source_mac);
         new_packet.set_destination(header.destination_mac);
         new_packet.set_ethertype(pnet::packet::ethernet::EtherType::new(2));
-        new_packet.set_payload(data.to_bytes());
+
+        let ipv4_packet = data.construct();
+        new_packet.set_payload(ipv4_packet.packet());
     }
 }

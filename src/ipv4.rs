@@ -49,13 +49,13 @@ impl IPv4Packet {
     fn new(header: IPv4Header, data: Segment) -> IPv4Packet {
         IPv4Packet { header, data }
     }
-    fn to_bytes(&self) -> &[u8] {
+    pub(crate) fn construct(&self) -> MutableIpv4Packet {
         let header = &self.header;
         let data = &self.data;
 
         /* TODO: Which size? */
         let mut vec: Vec<u8> = vec![0; 42];
-        let mut packet = MutableIpv4Packet::new(&mut vec).unwrap();
+        let mut packet = MutableIpv4Packet::owned(vec).unwrap();
 
         packet.set_version(header.version);
         /* TODO: ihl - auto? */
@@ -75,6 +75,6 @@ impl IPv4Packet {
         }
         packet.set_payload(data.to_bytes());
         packet.set_header_length(0); /* TODO: Set header length. */
-        packet.packet()
+        packet
     }
 }

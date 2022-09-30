@@ -12,13 +12,9 @@ mod icmp;
 use pnet::datalink;
 use pnet::datalink::NetworkInterface;
 
-use std::env;
 use gtk::prelude::*;
 use gtk::{ Application, ApplicationWindow, Button,
-           CheckButton, Frame, Grid, Label, ComboBoxText, Entry, gdk};
-use glib::GString;
-use crate::gdk::gio;
-use crate::gdk::glib::clone;
+           CheckButton, Frame, Grid, Label, ComboBoxText, Entry };
 
 fn send_packet(iface: &NetworkInterface) {
     println!("Package is sent through interface {}.", iface.name);
