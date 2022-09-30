@@ -1,126 +1,36 @@
-extern crate packet_builder;
-extern crate pnet;
+extern crate core;
 
-use packet_builder::payload::PayloadData;
-use packet_builder::*;
-use pnet::datalink::Channel::Ethernet;
-use pnet::datalink::{self, DataLinkSender, NetworkInterface};
-use pnet::packet::icmp::IcmpTypes;
-use pnet::packet::tcp::TcpFlags;
-use pnet::packet::tcp::TcpOption;
-use pnet::packet::Packet;
-use pnet::util::MacAddr;
+mod networking;
+mod ipv4;
+mod ethernet;
+mod tcp;
+mod udp;
+mod arp;
+mod frame;
+mod icmp;
+
+use pnet::datalink;
+use pnet::datalink::NetworkInterface;
+
 use std::env;
-use glib::GString;
-
 use gtk::prelude::*;
 use gtk::{ Application, ApplicationWindow, Button,
            CheckButton, Frame, Grid, Label, ComboBoxText, Entry, gdk};
-
+use glib::GString;
 use crate::gdk::gio;
 use crate::gdk::glib::clone;
-
-fn list_ifaces(interfaces: &Vec<NetworkInterface>) {
-    for iface in interfaces {
-        println!("{}", iface.name)
-    }
-}
-
-fn send_icmp(sender: &mut Box<dyn DataLinkSender>) {
-    // Generate a destination unreachable ICMP packet
-    let mut pkt_buf = [0u8; 1500];
-    let pkt = packet_builder!(
-             pkt_buf,
-             ether({set_source => MacAddr(10,1,1,1,1,1)}) /
-             ipv4({set_source => ipv4addr!("127.0.0.1"), set_destination => ipv4addr!("127.0.0.1") }) /
-             icmp_dest_unreach({set_icmp_type => IcmpTypes::DestinationUnreachable}) /
-             ipv4({set_source => ipv4addr!("10.8.0.1"), set_destination => ipv4addr!("127.0.0.1") }) /
-             udp({set_source => 53, set_destination => 5353}) /
-             payload({"hello".to_string().into_bytes()})
-        );
-
-    sender.send_to(pkt.packet(), None).unwrap().unwrap();
-}
-
-fn send_tcp(sender: &mut Box<dyn DataLinkSender>) {
-    // Generate a TCP PSH|ACK packet with data
-    let mut pkt_buf = [0u8; 1500];
-    let pkt = packet_builder!(
-             pkt_buf,
-             ether({set_destination => MacAddr(1,2,3,4,5,6), set_source => MacAddr(10,1,1,1,1,1)}) /
-             ipv4({set_source => ipv4addr!("192.168.1.1"), set_destination => ipv4addr!("127.0.0.1") }) /
-             tcp({set_source => 43455, set_destination => 80, set_flags => (TcpFlags::PSH | TcpFlags::ACK)}) /
-             payload({"hello".to_string().into_bytes()})
-        );
-
-    sender.send_to(pkt.packet(), None).unwrap().unwrap();
-}
-
-fn send_udp(sender: &mut Box<dyn DataLinkSender>) {
-    // Generate a UDP packet with data
-    let mut pkt_buf = [0u8; 1500];
-    let pkt = packet_builder!(
-             pkt_buf,
-             ether({set_destination => MacAddr(1,2,3,4,5,6), set_source => MacAddr(10,1,1,1,1,1)}) /
-             ipv4({set_source => ipv4addr!("127.0.0.1"), set_destination => ipv4addr!("127.0.0.1") }) /
-             udp({set_source => 12312, set_destination => 143}) /
-             payload({"hello".to_string().into_bytes()})
-        );
-    sender.send_to(pkt.packet(), None).unwrap().unwrap();
-}
-
-fn send_arp(sender: &mut Box<dyn DataLinkSender>) {
-    // Generate an ARP request
-    let mut pkt_buf = [0u8; 1500];
-    let pkt = packet_builder!(
-             pkt_buf,
-             ether({set_destination => MacAddr(0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF)}) /
-             arp({set_target_proto_addr => ipv4addr!("192.168.1.1"), set_sender_proto_addr => ipv4addr!("192.168.1.245")})
-        );
-    sender.send_to(pkt.packet(), None).unwrap().unwrap();
-}
-
-fn send_tcp_2(sender: &mut Box<dyn DataLinkSender>) {
-    // Generate a TCP SYN packet with mss and wscale options specified over VLAN ID 10
-    let mut pkt_buf = [0u8; 1500];
-    let pkt = packet_builder!(
-             pkt_buf,
-             ether({set_destination => MacAddr(1,2,3,4,5,6), set_source => MacAddr(10,1,1,1,1,1)}) /
-             vlan({set_vlan_identifier => 10}) /
-             ipv4({set_source => ipv4addr!("192.168.1.1"), set_destination => ipv4addr!("127.0.0.1") }) /
-             tcp({set_source => 43455, set_destination => 80, set_options => &[TcpOption::mss(1200), TcpOption::wscale(2)]}) /
-             payload({[0; 0]})
-        );
-
-    sender.send_to(pkt.packet(), None).unwrap().unwrap();
-}
-
-fn send_icmp_2(sender: &mut Box<dyn DataLinkSender>) {
-    // Generate an ICMP echo request
-    let mut pkt_buf = [0u8; 1500];
-    let pkt = packet_builder!(
-             pkt_buf,
-             ether({set_destination => MacAddr(1,2,3,4,5,6), set_source => MacAddr(10,1,1,1,1,1)}) /
-             ipv4({set_source => ipv4addr!("127.0.0.1"), set_destination => ipv4addr!("127.0.0.1") }) /
-             icmp_echo_req({set_icmp_type => IcmpTypes::EchoRequest}) /
-             payload({"hello".to_string().into_bytes()})
-        );
-
-    sender.send_to(pkt.packet(), None).unwrap().unwrap();
-}
-
 
 fn send_packet(iface: &NetworkInterface) {
     println!("Package is sent through interface {}.", iface.name);
 }
 
 fn generate_interface_protocol_section() -> gtk::Box {
-    let common_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
+    let common_box = gtk::Box::builder().name("Section 1").orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
         .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
 
     /* Left "Interface:" label. */
     {
-        let interfaces_title = Label::builder().label("Interface")
+        let interfaces_title = Label::builder().name("Interface label").label("Interface")
             .halign(gtk::Align::Start).name("Interface-label").build();
         interfaces_title.add_css_class("ifaces-title");
         common_box.append(&interfaces_title);
@@ -129,7 +39,7 @@ fn generate_interface_protocol_section() -> gtk::Box {
     /* Dropdown list in the middle. */
     {
         let interfaces = datalink::interfaces();
-        let iface_list = ComboBoxText::builder().name("Interfaces-list").build();
+        let iface_list = ComboBoxText::builder().name("Interface list").build();
         interfaces.iter().for_each(|iface| {
             iface_list.append(Some(&*iface.name), &*iface.name);
         });
@@ -139,7 +49,7 @@ fn generate_interface_protocol_section() -> gtk::Box {
 
     /* Protocol grid table. */
     {
-        let protocol_table = Grid::builder().margin_start(6).margin_end(6).row_spacing(6)
+        let protocol_table = Grid::builder().name("Protocol table").margin_start(6).margin_end(6).row_spacing(6)
             .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(6).name("Protocol-table").build();
 
         let ip_button = CheckButton::builder().label("IP").active(true).build();
@@ -161,7 +71,7 @@ fn generate_interface_protocol_section() -> gtk::Box {
 
     /* IP addresses grid. */
     {
-        let grid = Grid::builder().margin_start(24).margin_end(24).row_spacing(24)
+        let grid = Grid::builder().name("IP table").margin_start(24).margin_end(24).row_spacing(24)
             .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(24).name("IP-table").build();
 
         grid.attach(&Label::new(Some("Source IP")), 0, 0, 1, 1);
@@ -174,7 +84,7 @@ fn generate_interface_protocol_section() -> gtk::Box {
 
     /* Sending button on the right. */
     {
-        let main_button = Button::builder().label("Generate").name("Generate-button").build();
+        let main_button = Button::builder().name("Generate button").label("Generate").name("Generate-button").build();
         main_button.connect_clicked(move |button| {
             println!("Packet is sent.");
         });
@@ -183,9 +93,8 @@ fn generate_interface_protocol_section() -> gtk::Box {
 
     common_box
 }
-
 fn generate_address_table() -> Grid {
-    let grid = Grid::builder().margin_start(24).margin_end(24).halign(gtk::Align::Center)
+    let grid = Grid::builder().name("Section 2").margin_start(24).margin_end(24).halign(gtk::Align::Center)
         .valign(gtk::Align::Center).row_spacing(24).column_spacing(24).build();
 
     let source_lable = Label::new(Some("Source MAC")); source_lable.set_halign(gtk::Align::Start);
@@ -197,7 +106,19 @@ fn generate_address_table() -> Grid {
 
     grid
 }
+fn generate_utility_buttons() -> gtk::Box {
+    let main_box = gtk::Box::builder().name("Section 3").orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
+        .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
 
+    main_box.append(&Button::with_label("Save Packet"));
+    main_box.append(&Button::with_label("Send Sequence"));
+    main_box.append(&Button::with_label("Open File..."));
+    main_box.append(&Button::with_label("Delete Packet"));
+    main_box.append(&Button::with_label("Delete File"));
+    main_box.append(&Button::with_label("Create File"));
+
+    main_box
+}
 fn generate_ip_section() -> Frame {
     /* Left grid. Five rows. Each row consists of label, checkbox 'auto', text entry. */
     let left_grid = Grid::builder().margin_start(24).margin_end(24).row_spacing(24)
@@ -255,12 +176,11 @@ fn generate_ip_section() -> Frame {
         .margin_end(24).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).margin_bottom(20).build();
     common_box.append(&left_grid); common_box.append(&right_box);
 
-    let box_frame = Frame::new(Some("IP options"));
+    let box_frame = Frame::builder().name("Section 4").label("IP options").build();
     box_frame.set_child(Some(&common_box));
 
     box_frame
 }
-
 fn generate_tcp_section() -> Frame {
     let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).halign(gtk::Align::Center)
         .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).margin_bottom(20).build();
@@ -348,33 +268,19 @@ fn generate_tcp_section() -> Frame {
         main_box.append(&lower_box);
     }
 
-    let frame = Frame::new(Some("TCP options"));
+    let frame = Frame::builder().name("Section 5").label("TCP options").build();
     frame.set_child(Some(&main_box));
     frame
 }
 
-fn generate_utility_buttons() -> gtk::Box {
-    let main_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
-        .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
-
-    main_box.append(&Button::with_label("Save Packet"));
-    main_box.append(&Button::with_label("Send Sequence"));
-    main_box.append(&Button::with_label("Open File..."));
-    main_box.append(&Button::with_label("Delete Packet"));
-    main_box.append(&Button::with_label("Delete File"));
-    main_box.append(&Button::with_label("Create File"));
-
-    main_box
-}
-
 fn get_current_configuration(container: &gtk::Box) {
     let first = container.first_child().unwrap();
-    let ip_table = first.find_property("IP-table").unwrap();
+    let ip_table = first.find_property("Section 1").unwrap();
 }
 
 fn main() {
     let application = Application::builder()
-        .application_id("com.example.Project")
+        .application_id("Network Packet Generator")
         .build();
 
     application.connect_activate(|app| {
