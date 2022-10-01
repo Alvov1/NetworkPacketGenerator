@@ -8,6 +8,11 @@ mod udp;
 mod arp;
 mod frame;
 mod icmp;
+mod database;
+
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use pnet::datalink;
 use pnet::datalink::NetworkInterface;
@@ -16,18 +21,20 @@ use gtk::prelude::*;
 use gtk::{ Application, ApplicationWindow, Button,
            CheckButton, Frame, Grid, Label, ComboBoxText, Entry };
 
-fn send_packet(iface: &NetworkInterface) {
-    println!("Package is sent through interface {}.", iface.name);
+use crate::database::Database;
+use crate::database::Protocol;
+
+fn send_packet(database: &Rc<RefCell<Database>>) {
+    println!("Using iface: {}", database.borrow().get_iface());
 }
 
-fn generate_interface_protocol_section() -> gtk::Box {
-    let common_box = gtk::Box::builder().name("Section 1").orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
+fn generate_interface_protocol_section(database: &mut Rc<RefCell<Database>>) -> gtk::Box {
+    let common_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
         .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
 
     /* Left "Interface:" label. */
     {
-        let interfaces_title = Label::builder().name("Interface label").label("Interface")
-            .halign(gtk::Align::Start).name("Interface-label").build();
+        let interfaces_title = Label::builder().label("Interface").halign(gtk::Align::Start).build();
         interfaces_title.add_css_class("ifaces-title");
         common_box.append(&interfaces_title);
     }
@@ -35,19 +42,27 @@ fn generate_interface_protocol_section() -> gtk::Box {
     /* Dropdown list in the middle. */
     {
         let interfaces = datalink::interfaces();
-        let iface_list = ComboBoxText::builder().name("Interface list").build();
+        let iface_list = ComboBoxText::builder().name("Interface-list").build();
         interfaces.iter().for_each(|iface| {
             iface_list.append(Some(&*iface.name), &*iface.name);
         });
+
         iface_list.set_active(Some(0));
+        let database_for_ifaces = database.clone();
+        database_for_ifaces.borrow_mut().set_iface(&iface_list.active_text().unwrap().to_string());
+        iface_list.connect_changed(move |iface_list| {
+            database_for_ifaces.borrow_mut().set_iface(&iface_list.active_text().unwrap().to_string());
+        });
+
         common_box.append(&iface_list);
     }
 
     /* Protocol grid table. */
     {
-        let protocol_table = Grid::builder().name("Protocol table").margin_start(6).margin_end(6).row_spacing(6)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(6).name("Protocol-table").build();
+        let protocol_table = Grid::builder().margin_start(6).margin_end(6).row_spacing(6)
+            .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(6).build();
 
+        let database_for_protocols = database.clone();
         let ip_button = CheckButton::builder().label("IP").active(true).build();
         let icmp_button = CheckButton::with_label("ICMP");
         let tcp_button = CheckButton::with_label("TCP");
@@ -67,11 +82,16 @@ fn generate_interface_protocol_section() -> gtk::Box {
 
     /* IP addresses grid. */
     {
-        let grid = Grid::builder().name("IP table").margin_start(24).margin_end(24).row_spacing(24)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(24).name("IP-table").build();
+        let grid = Grid::builder().margin_start(24).margin_end(24).row_spacing(24)
+            .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(24).build();
 
         grid.attach(&Label::new(Some("Source IP")), 0, 0, 1, 1);
-        grid.attach(&Entry::builder().placeholder_text("Source IPv4").build(), 1, 0, 1, 1);
+        let source_entry = Entry::builder().placeholder_text("Source IPv4").build();
+        source_entry.connect_changed(move |source_entry| {
+            println!("{}", source_entry.text());
+        });
+        source_entry.connect
+        grid.attach(&source_entry, 1, 0, 1, 1);
         grid.attach(&Label::new(Some("Destination IP")), 0, 1, 1, 1);
         grid.attach(&Entry::builder().placeholder_text("Destination IPv4").build(), 1, 1, 1, 1);
 
@@ -80,17 +100,18 @@ fn generate_interface_protocol_section() -> gtk::Box {
 
     /* Sending button on the right. */
     {
-        let main_button = Button::builder().name("Generate button").label("Generate").name("Generate-button").build();
+        let main_button = Button::builder().label("Generate").build();
+        let database_for_button = database.clone();
         main_button.connect_clicked(move |button| {
-            println!("Packet is sent.");
+            send_packet(&database_for_button);
         });
         common_box.append(&main_button);
     }
 
     common_box
 }
-fn generate_address_table() -> Grid {
-    let grid = Grid::builder().name("Section 2").margin_start(24).margin_end(24).halign(gtk::Align::Center)
+fn generate_address_table(database: &Rc<RefCell<Database>>) -> Grid {
+    let grid = Grid::builder().margin_start(24).margin_end(24).halign(gtk::Align::Center)
         .valign(gtk::Align::Center).row_spacing(24).column_spacing(24).build();
 
     let source_lable = Label::new(Some("Source MAC")); source_lable.set_halign(gtk::Align::Start);
@@ -102,8 +123,8 @@ fn generate_address_table() -> Grid {
 
     grid
 }
-fn generate_utility_buttons() -> gtk::Box {
-    let main_box = gtk::Box::builder().name("Section 3").orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
+fn generate_utility_buttons(database: &Rc<RefCell<Database>>) -> gtk::Box {
+    let main_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
         .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
 
     main_box.append(&Button::with_label("Save Packet"));
@@ -115,7 +136,7 @@ fn generate_utility_buttons() -> gtk::Box {
 
     main_box
 }
-fn generate_ip_section() -> Frame {
+fn generate_ip_section(database: &Rc<RefCell<Database>>) -> Frame {
     /* Left grid. Five rows. Each row consists of label, checkbox 'auto', text entry. */
     let left_grid = Grid::builder().margin_start(24).margin_end(24).row_spacing(24)
         .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(24).build();
@@ -172,12 +193,12 @@ fn generate_ip_section() -> Frame {
         .margin_end(24).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).margin_bottom(20).build();
     common_box.append(&left_grid); common_box.append(&right_box);
 
-    let box_frame = Frame::builder().name("Section 4").label("IP options").build();
+    let box_frame = Frame::builder().label("IP options").build();
     box_frame.set_child(Some(&common_box));
 
     box_frame
 }
-fn generate_tcp_section() -> Frame {
+fn generate_tcp_section(database: &Rc<RefCell<Database>>) -> Frame {
     let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).halign(gtk::Align::Center)
         .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).margin_bottom(20).build();
 
@@ -264,7 +285,7 @@ fn generate_tcp_section() -> Frame {
         main_box.append(&lower_box);
     }
 
-    let frame = Frame::builder().name("Section 5").label("TCP options").build();
+    let frame = Frame::builder().label("TCP options").build();
     frame.set_child(Some(&main_box));
     frame
 }
@@ -286,19 +307,21 @@ fn main() {
         let container = gtk::Box::builder().orientation(gtk::Orientation::Vertical).margin_top(24).margin_bottom(24)
             .margin_start(24).margin_end(24).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
 
-        let ip_protocol_table = generate_interface_protocol_section();
+        let mut packet_database = Rc::new(RefCell::new(Database::new()));
+
+        let ip_protocol_table = generate_interface_protocol_section(&mut packet_database);
         container.append(&ip_protocol_table);
 
-        let mac_address_table = generate_address_table();
+        let mac_address_table = generate_address_table(&mut packet_database);
         container.append(&mac_address_table);
 
-        let buttons = generate_utility_buttons();
+        let buttons = generate_utility_buttons(&mut packet_database);
         container.append(&buttons);
 
-        let ip_options = generate_ip_section();
+        let ip_options = generate_ip_section(&mut packet_database);
         container.append(&ip_options);
 
-        let tcp_options = generate_tcp_section();
+        let tcp_options = generate_tcp_section(&mut packet_database);
         container.append(&tcp_options);
 
         window.set_child(Some(&container));
