@@ -10,3 +10,4 @@ gtk = { version = "0.4.8", package = "gtk4" }
 glib = "0.15.12"
 packet-builder = "0.6.0"
 pnet = "0.30.0"
+queues = "1.1.0"

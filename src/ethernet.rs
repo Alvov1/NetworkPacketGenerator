@@ -17,13 +17,13 @@ struct EthernetTail {
 }
 impl EthernetTail {}
 
-struct EthernetFrame {
+pub(crate) struct EthernetFrame {
     header: EthernetHeader,
     data: IPv4Packet,
     tail: EthernetTail
 }
 impl EthernetFrame {
-    fn send(&self, sender: &mut Box<dyn DataLinkSender>) {
+    pub(crate) fn send(&self, sender: &mut Box<dyn DataLinkSender>) {
         let header = &self.header;
         let data = &self.data;
         let tail = &self.tail;
@@ -38,5 +38,13 @@ impl EthernetFrame {
 
         let ipv4_packet = data.construct();
         new_packet.set_payload(ipv4_packet.packet());
+    }
+    pub(crate) fn new() -> EthernetFrame {
+        todo!()
+    }
+}
+impl Clone for EthernetFrame {
+    fn clone(&self) -> Self {
+        todo!()
     }
 }
