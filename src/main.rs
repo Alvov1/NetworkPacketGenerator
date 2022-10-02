@@ -367,85 +367,239 @@ fn generate_tcp_section(database: &Rc<RefCell<Database>>) -> Frame {
     let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).halign(gtk::Align::Center)
         .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).margin_bottom(20).build();
 
-    /* Upper box. */
-    {
-        /* Left grid. Consists of 4 rows. Each one is label - checkbox auto - text entry. */
-        let left_grid = Grid::builder().margin_start(24).margin_end(24).row_spacing(24)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(24).build();
-        let source_port = Label::builder().label("Source port:").halign(gtk::Align::Start).build();
-        left_grid.attach(&source_port, 0, 0, 1, 1);
-        let destination_port = Label::builder().label("Destination port:").halign(gtk::Align::Start).build();
-        left_grid.attach(&destination_port, 0, 1, 1, 1);
-        let sequence_number = Label::builder().label("Sequence number:").halign(gtk::Align::Start).build();
-        left_grid.attach(&sequence_number, 0, 2, 1, 1);
-        let acknowledgement = Label::builder().label("Acknowledgement number:").halign(gtk::Align::Start).build();
-        left_grid.attach(&acknowledgement, 0, 3, 1, 1);
-        for row in 0..4 {
-            let auto_entry_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-            auto_entry_box.append(&CheckButton::builder().label("Auto").active(true).build());
-            auto_entry_box.append(&Entry::new());
-            left_grid.attach(&(auto_entry_box.clone()), 1, row, 1, 1);
-        }
-
-        /* Middle grid. Consists of 4 rows. Each one is label - checkbox auto - text entry. */
-        let middle_grid = Grid::builder().halign(gtk::Align::Center)
-            .valign(gtk::Align::Center).row_spacing(24).column_spacing(24).build();
-        let data_offset = Label::builder().label("Data offset:").halign(gtk::Align::Start).build();
-        middle_grid.attach(&data_offset, 0, 0, 1, 1);
-        let window = Label::builder().label("Window:").halign(gtk::Align::Start).build();
-        middle_grid.attach(&window, 0, 1, 1, 1);
-        let checksum = Label::builder().label("Checksum:").halign(gtk::Align::Start).build();
-        middle_grid.attach(&checksum, 0, 2, 1, 1);
-        let urgent = Label::builder().label("Urgent:").halign(gtk::Align::Start).build();
-        middle_grid.attach(&urgent, 0, 3, 1, 1);
-        for row in 0..4 {
-            let auto_entry_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-            auto_entry_box.append(&CheckButton::builder().label("Auto").active(true).build());
-            auto_entry_box.append(&Entry::new());
-            middle_grid.attach(&(auto_entry_box.clone()), 1, row, 1, 1);
-        }
-
-        /* Right grid with flags. */
-        let right_inner_grid = Grid::builder().halign(gtk::Align::Center)
-            .valign(gtk::Align::Center).row_spacing(24).column_spacing(24).build();
-        right_inner_grid.attach(&CheckButton::with_label("ACK"), 0, 0, 1, 1);
-        right_inner_grid.attach(&CheckButton::with_label("SYN"), 1, 0, 1, 1);
-        right_inner_grid.attach(&CheckButton::with_label("PSH"), 0, 1, 1, 1);
-        right_inner_grid.attach(&CheckButton::with_label("FIN"), 1, 1, 1, 1);
-        right_inner_grid.attach(&CheckButton::with_label("RST"), 0, 2, 1, 1);
-        right_inner_grid.attach(&CheckButton::with_label("URG"), 1, 2, 1, 1);
-        right_inner_grid.attach(&CheckButton::with_label("ECE"), 0, 3, 1, 1);
-        right_inner_grid.attach(&CheckButton::with_label("CWR"), 1, 3, 1, 1);
-
-        /* Frame with flags check buttons. */
-        let right_frame = Frame::builder().label("Flags").child(&right_inner_grid).build();
-
-        /* Upper box. */
+    /* Upper box. */ {
         let upper_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
             .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
-        upper_box.append(&left_grid); upper_box.append(&middle_grid); upper_box.append(&right_frame);
+
+        /* Left grid */ {
+            /* Left grid. Consists of 4 rows. Each one is label - checkbox auto - text entry. */
+            let left_grid = Grid::builder().margin_start(24).margin_end(24).row_spacing(24)
+                .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(24).build();
+
+            /* Left grid labels */ {
+                /* Source port */ {
+                    let source_port = Label::builder().label("Source port:").halign(gtk::Align::Start).build();
+                    left_grid.attach(&source_port, 0, 0, 1, 1);
+                }
+                /* Destination port */ {
+                    let destination_port = Label::builder().label("Destination port:").halign(gtk::Align::Start).build();
+                    left_grid.attach(&destination_port, 0, 1, 1, 1);
+                }
+                /* Sequence number */ {
+                    let sequence_number = Label::builder().label("Sequence number:").halign(gtk::Align::Start).build();
+                    left_grid.attach(&sequence_number, 0, 2, 1, 1);
+                }
+                /* Acknowledgement */ {
+                    let acknowledgement = Label::builder().label("Acknowledgement number:").halign(gtk::Align::Start).build();
+                    left_grid.attach(&acknowledgement, 0, 3, 1, 1);
+                }
+            }
+
+            /* Left grid auto-entry boxes */ {
+                /* Source port */ {
+                    let source_port_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                    let source_port_button = CheckButton::builder().label("Auto").active(true).build();
+                    source_port_box.append(&source_port_button);
+                    source_port_button.connect_toggled(move |_| println!("Source port auto activated."));
+                    let source_port_entry = Entry::new();
+                    source_port_box.append(&source_port_entry);
+                    source_port_entry.connect_changed(move |source_port_entry| println!("Source port changed to {}", source_port_entry.text()));
+                    left_grid.attach(&(source_port_box.clone()), 1, 0, 1, 1);
+                }
+                /* Destination port */ {
+                    let destination_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                    let destination_port_button = CheckButton::builder().label("Auto").active(true).build();
+                    destination_box.append(&destination_port_button);
+                    destination_port_button.connect_toggled(move |_| println!("Destination port auto activated."));
+                    let destination_port_entry = Entry::new();
+                    destination_box.append(&destination_port_entry);
+                    destination_port_entry.connect_changed(move |source_port_entry| println!("Destination port changed to {}", source_port_entry.text()));
+                    left_grid.attach(&(destination_box.clone()), 1, 1, 1, 1);
+                }
+                /* Sequence number */ {
+                    let sequence_number_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                    let sequence_number_button = CheckButton::builder().label("Auto").active(true).build();
+                    sequence_number_box.append(&sequence_number_button);
+                    sequence_number_button.connect_toggled(move |_| println!("Sequence number auto activated."));
+                    let sequence_number_entry = Entry::new();
+                    sequence_number_box.append(&sequence_number_entry);
+                    sequence_number_entry.connect_changed(move |source_port_entry| println!("Sequence number changed to {}", source_port_entry.text()));
+                    left_grid.attach(&(sequence_number_box.clone()), 1, 2, 1, 1);
+                }
+                /* Acknowledgement */ {
+                    let acknowledgement_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                    let acknowledgement_button = CheckButton::builder().label("Auto").active(true).build();
+                    acknowledgement_box.append(&acknowledgement_button);
+                    acknowledgement_button.connect_toggled(move |_| println!("Acknowledgement auto activated."));
+                    let acknowledgement_entry = Entry::new();
+                    acknowledgement_box.append(&acknowledgement_entry);
+                    acknowledgement_entry.connect_changed(move |source_port_entry| println!("Acknowledgement changed to {}", source_port_entry.text()));
+                    left_grid.attach(&(acknowledgement_box.clone()), 1, 3, 1, 1);
+                }
+            }
+
+            upper_box.append(&left_grid);
+        }
+
+        /* Middle grid */ {
+            /* Middle grid. Consists of 4 rows. Each one is label - checkbox auto - text entry. */
+            let middle_grid = Grid::builder().halign(gtk::Align::Center)
+                .valign(gtk::Align::Center).row_spacing(24).column_spacing(24).build();
+
+            /* Middle grid labels */ {
+                /* Offset */ {
+                    let data_offset = Label::builder().label("Data offset:").halign(gtk::Align::Start).build();
+                    middle_grid.attach(&data_offset, 0, 0, 1, 1);
+                }
+                /* Window size */ {
+                    let window = Label::builder().label("Window:").halign(gtk::Align::Start).build();
+                    middle_grid.attach(&window, 0, 1, 1, 1);
+                }
+                /* Checksum */ {
+                    let checksum = Label::builder().label("Checksum:").halign(gtk::Align::Start).build();
+                    middle_grid.attach(&checksum, 0, 2, 1, 1);
+                }
+                /* Urgent pointer */ {
+                    let urgent = Label::builder().label("Urgent:").halign(gtk::Align::Start).build();
+                    middle_grid.attach(&urgent, 0, 3, 1, 1);
+                }
+            }
+
+            /* Middle grid auto-entry boxes */ {
+                /* Offset */ {
+                    let offset_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                    let offset_button = CheckButton::builder().label("Auto").active(true).build();
+                    offset_box.append(&offset_button);
+                    offset_button.connect_toggled(move |_| println!("Offset auto activated."));
+                    let offset_entry = Entry::new();
+                    offset_box.append(&offset_entry);
+                    offset_entry.connect_changed(move |offset_entry| println!("Offset changed to {}", offset_entry.text()));
+                    middle_grid.attach(&(offset_box.clone()), 1, 0, 1, 1);
+                }
+                /* Window size */ {
+                    let window_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                    let window_button = CheckButton::builder().label("Auto").active(true).build();
+                    window_box.append(&window_button);
+                    window_button.connect_toggled(move |_| println!("Window size auto activated."));
+                    let window_entry = Entry::new();
+                    window_box.append(&window_entry);
+                    window_entry.connect_changed(move |offset_entry| println!("Window size changed to {}", offset_entry.text()));
+                    middle_grid.attach(&(window_box.clone()), 1, 1, 1, 1);
+                }
+                /* Checksum */ {
+                    let checksum_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                    let checksum_button = CheckButton::builder().label("Auto").active(true).build();
+                    checksum_box.append(&checksum_button);
+                    checksum_button.connect_toggled(move |_| println!("Checksum auto activated."));
+                    let checksum_entry = Entry::new();
+                    checksum_box.append(&checksum_entry);
+                    checksum_entry.connect_changed(move |offset_entry| println!("Checksum changed to {}", offset_entry.text()));
+                    middle_grid.attach(&(checksum_box.clone()), 1, 2, 1, 1);
+                }
+                /* Urgent pointer */ {
+                    let urgent_ptr_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                    let urgent_button = CheckButton::builder().label("Auto").active(true).build();
+                    urgent_ptr_box.append(&urgent_button);
+                    urgent_button.connect_toggled(move |_| println!("Urgent pointer auto activated."));
+                    let urgent_entry = Entry::new();
+                    urgent_ptr_box.append(&urgent_entry);
+                    urgent_entry.connect_changed(move |offset_entry| println!("Urgent pointer changed to {}", offset_entry.text()));
+                    middle_grid.attach(&(urgent_ptr_box.clone()), 1, 3, 1, 1);
+                }
+            }
+
+            upper_box.append(&middle_grid);
+        }
+
+        /* Right grid */ {
+            /* Right grid with flags. */
+            let right_inner_grid = Grid::builder().halign(gtk::Align::Center)
+                .valign(gtk::Align::Center).row_spacing(24).column_spacing(24).build();
+
+            /* Right grid buttons */ {
+                let ack = CheckButton::with_label("ACK");
+                ack.connect_toggled(move |_| println!("ACK flag enabled"));
+                right_inner_grid.attach(&ack, 0, 0, 1, 1);
+
+                let syn = CheckButton::with_label("SYN");
+                syn.connect_toggled(move |_| println!("SYN flag enabled"));
+                right_inner_grid.attach(&syn, 1, 0, 1, 1);
+
+                let psh = CheckButton::with_label("PSH");
+                psh.connect_toggled(move |_| println!("PSH flag enabled"));
+                right_inner_grid.attach(&psh, 0, 1, 1, 1);
+
+                let fin = CheckButton::with_label("FIN");
+                fin.connect_toggled(move |_| println!("FIN flag enabled"));
+                right_inner_grid.attach(&fin, 1, 1, 1, 1);
+
+                let rst = CheckButton::with_label("RST");
+                rst.connect_toggled(move |_| println!("RST flag enabled"));
+                right_inner_grid.attach(&rst, 0, 2, 1, 1);
+
+                let urg = CheckButton::with_label("URG");
+                urg.connect_toggled(move |_| println!("URG flag enabled"));
+                right_inner_grid.attach(&urg, 1, 2, 1, 1);
+
+                let ece = CheckButton::with_label("ECE");
+                ece.connect_toggled(move |_| println!("ECE flag enabled"));
+                right_inner_grid.attach(&ece, 0, 3, 1, 1);
+
+                let cwr = CheckButton::with_label("CWR");
+                cwr.connect_toggled(move |_| println!("CWR flag enabled"));
+                right_inner_grid.attach(&cwr, 1, 3, 1, 1);
+            }
+
+            /* Right grid frame with flags check buttons. */
+            let right_frame = Frame::builder().label("Flags").child(&right_inner_grid).build();
+
+            upper_box.append(&right_frame);
+        }
 
         main_box.append(&upper_box);
     }
 
-    /* Lower box. */
-    {
-        let data_label = Label::new(Some("Data (Various):"));
-
-        let data_text_entry = Entry::builder().placeholder_text("Enter data").build();
-
-        let reserved_bits_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).margin_start(24)
-            .halign(gtk::Align::Center).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
-        reserved_bits_box.append(&CheckButton::with_label("1"));
-        reserved_bits_box.append(&CheckButton::with_label("2"));
-        reserved_bits_box.append(&CheckButton::with_label("3"));
-        reserved_bits_box.append(&CheckButton::with_label("4"));
-
-        let reserved_bits_frame = Frame::builder().label("Reserved bits").child(&reserved_bits_box).build();
-
+    /* Lower box. */ {
         let lower_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
-            .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
-        lower_box.append(&data_label); lower_box.append(&data_text_entry); lower_box.append(&reserved_bits_frame);
+        .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
+
+        /* Data label */
+        let data_label = Label::new(Some("Data (Various):"));
+        lower_box.append(&data_label);
+
+        /* Data text entry */
+        let data_text_entry = Entry::builder().placeholder_text("Enter data").build();
+        lower_box.append(&data_text_entry);
+        data_text_entry.connect_changed(move |data_text_entry| println!("Data text changed to {}", data_text_entry.text()));
+
+        /* Reserved bits frame */ {
+            let reserved_bits_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).margin_start(24)
+                .halign(gtk::Align::Center).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
+
+            /* Reserved bit 1 */ {
+                let first = CheckButton::with_label("1");
+                reserved_bits_box.append(&first);
+                first.connect_toggled(move |_| println!("Reserved bit 1 enabled."));
+            }
+            /* Reserved bit 2 */ {
+                let second = CheckButton::with_label("2");
+                reserved_bits_box.append(&second);
+                second.connect_toggled(move |_| println!("Reserved bit 2 enabled."));
+            }
+            /* Reserved bit 3 */ {
+                let third = CheckButton::with_label("3");
+                reserved_bits_box.append(&third);
+                third.connect_toggled(move |_| println!("Reserved bit 3 enabled."));
+            }
+            /* Reserved bit 4 */ {
+                let forth = CheckButton::with_label("4");
+                reserved_bits_box.append(&forth);
+                forth.connect_toggled(move |_| println!("Reserved bit 4 enabled."));
+            }
+
+            let reserved_bits_frame = Frame::builder().label("Reserved bits").child(&reserved_bits_box).build();
+            lower_box.append(&reserved_bits_frame);
+        }
 
         main_box.append(&lower_box);
     }
