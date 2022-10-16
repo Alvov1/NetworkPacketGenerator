@@ -1,5 +1,7 @@
+use std::sync::{Arc, Mutex};
 use gtk::{Button, CheckButton, Frame, Grid, ComboBoxText, Entry, Widget, Buildable};
 use gtk::prelude::{BoxExt, ButtonExt, CheckButtonExt, ComboBoxExtManual, GridExt};
+use gtk::prelude::FrameExt;
 use pnet::datalink;
 use crate::MyWidgets;
 
@@ -51,15 +53,6 @@ pub(crate) fn generate_interface_protocol_section(widgets: &MyWidgets) -> gtk::B
         grid.attach(&widgets.dest_ip_entry, 1, 1, 1, 1);
 
         common_box.append(&grid);
-    }
-
-    /* Sending button on the right. */
-    {
-        let main_button = Button::with_label("Collect");
-        main_button.connect_clicked(move |button| {
-
-        });
-        common_box.append(&main_button);
     }
 
     common_box
