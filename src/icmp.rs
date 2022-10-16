@@ -1,5 +1,7 @@
+use std::thread;
+use std::time::Duration;
 use gtk::{Button, DropDown, Entry, Grid, Label, Window};
-use gtk::prelude::{BoxExt, EditableExt, GridExt, GtkWindowExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, EditableExt, GridExt, GtkWindowExt, WidgetExt};
 use pnet::packet::icmp::{IcmpCode, IcmpTypes, MutableIcmpPacket};
 use crate::error_window::error;
 use crate::main;
@@ -43,55 +45,43 @@ impl ICMPWidgets {
         Some(packet)
     }
 }
-pub struct ICMPWindow<'a> {
+pub struct ICMPWindow {
     widgets: ICMPWidgets,
-    window: Window,
-    packet: Option<MutableIcmpPacket<'a>>,
-    ok_button: Button,
-    cancel_button: Button
+    pub window: Window
 }
-impl ICMPWindow<'_> {
-    fn new() -> ICMPWindow<'static> {
+impl ICMPWindow {
+    pub fn new() -> ICMPWindow {
         let widgets = ICMPWidgets::new();
-        let window = Window::builder().title("ICMP settings").default_width(700).default_height(500).build();
+        let window = Window::builder().title("ICMP settings").default_width(400).default_height(200).build();
 
         let upper_grid = Grid::builder().margin_start(24).margin_end(24).row_spacing(24)
             .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(24).build();
 
-        let icmp_type_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
-        icmp_type_box.append(&Label::new(Some("Type"))); icmp_type_box.append(&widgets.type_dropdown);
-        upper_grid.attach(&icmp_type_box, 0, 0, 1, 1);
+        upper_grid.attach(&Label::new(Some("Type")),    0, 0, 1, 1);
+        upper_grid.attach(&widgets.type_dropdown,           1, 0, 1, 1);
 
-        let icmp_code = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
-        icmp_code.append(&Label::new(Some("Code"))); icmp_code.append(&widgets.code_entry);
-        upper_grid.attach(&icmp_code, 1, 0, 1, 1);
+        upper_grid.attach(&Label::new(Some("Code")),     2, 0, 1, 1);
+        upper_grid.attach(&widgets.code_entry,               3, 0, 1, 1);
 
-        let icmp_checksum = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
-        icmp_checksum.append(&Label::new(Some("Checksum"))); icmp_checksum.append(&widgets.checksum_entry);
-        upper_grid.attach(&icmp_checksum, 0, 1, 1, 1);
+        upper_grid.attach(&Label::new(Some("Checksum")), 0, 1, 1, 1);
+        upper_grid.attach(&widgets.checksum_entry,           1, 1, 1, 1);
 
-        let icmp_rest = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
-        icmp_rest.append(&Label::new(Some("Rest of the header"))); icmp_rest.append(&widgets.rest_entry);
-        upper_grid.attach(&icmp_rest, 1, 1, 1, 1);
+        upper_grid.attach(&Label::new(Some("Rest")),     2, 1, 1, 1);
+        upper_grid.attach(&widgets.rest_entry,               3, 1, 1, 1);
 
         let lower_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
             .halign(gtk::Align::End).valign(gtk::Align::Center).spacing(24).margin_start(24).margin_end(24).build();
-        let ok_button = Button::with_label("OK"); let cancel_button = Button::with_label("Cancel");
-        lower_box.append(&ok_button); lower_box.append(&cancel_button);
+        let send = Button::with_label("Send"); let cancel = Button::with_label("Cancel");
+        lower_box.append(&send); lower_box.append(&cancel);
 
         let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical)
             .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
         main_box.append(&upper_grid); main_box.append(&lower_box);
 
         window.set_child(Some(&main_box));
-        ICMPWindow { widgets, window, packet: None, ok_button, cancel_button }
+        ICMPWindow { widgets, window }
     }
-    pub fn show() {
-        let window = ICMPWindow::new();
-        window.window.show();
+    pub fn collect(&self) -> Option<MutableIcmpPacket> {
+        return self.widgets.collect();
     }
 }

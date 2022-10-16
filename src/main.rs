@@ -10,6 +10,7 @@ mod gui;
 mod widgets;
 mod error_window;
 mod icmp;
+mod udp;
 
 fn main() {
     let application = Application::builder()

@@ -2,7 +2,7 @@ use std::net::Ipv4Addr;
 use std::str::FromStr;
 use glib::ObjectExt;
 use gtk::{Button, CheckButton, ComboBoxText, DropDown, Entry, Label, Window};
-use gtk::prelude::{ButtonExt, CheckButtonExt, EditableExt};
+use gtk::prelude::{ButtonExt, CheckButtonExt, EditableExt, GtkWindowExt};
 
 use pnet::packet::ipv4::MutableIpv4Packet;
 use pnet::packet::icmp::MutableIcmpPacket;
@@ -11,6 +11,7 @@ use pnet::packet::udp::MutableUdpPacket;
 use pnet::packet::ethernet::MutableEthernetPacket;
 use crate::error_window::error;
 use crate::icmp::ICMPWindow;
+use crate::udp::UDPWindow;
 
 pub struct MyWidgets {
     pub interface_list: ComboBoxText,
@@ -106,38 +107,46 @@ impl MyWidgets {
     }
 
     pub fn collect(&self) -> Option<MutableEthernetPacket> {
-        let mut buffer: Option<&[u8]> = None;
+        // let mut buffer: Option<&[u8]> = None;
         if self.icmp_button.is_active() {
-            ICMPWindow::show();
-
+            let mut udp = UDPWindow::icmp();
+            udp.show();
         }
-        let mut ip_packet = MutableIpv4Packet::owned(vec![0u8; MutableIpv4Packet::minimum_packet_size()]).unwrap();
+        // let mut ip_packet = MutableIpv4Packet::owned(vec![0u8; MutableIpv4Packet::minimum_packet_size()]).unwrap();
 
-        /* Set ip addresses. */ {
-            match Ipv4Addr::from_str(&*self.src_ip_entry.text()) {
-                Ok(address) => ip_packet.set_source(address),
-                Err(_) => {
-                    error("Incorrect source ip address.");
-                    return None;
-                }
-            }
-            match Ipv4Addr::from_str(&*self.dest_ip_entry.text()) {
-                Ok(address) => ip_packet.set_destination(address),
-                Err(_) => {
-                    error("Incorrect destination ip address.");
-                    return None;
-                }
-            }
-        }
+        // /* Set ip addresses. */ {
+        //     match Ipv4Addr::from_str(&*self.src_ip_entry.text()) {
+        //         Ok(address) => ip_packet.set_source(address),
+        //         Err(_) => {
+        //             error("Incorrect source ip address.");
+        //             return None;
+        //         }
+        //     }
+        //     match Ipv4Addr::from_str(&*self.dest_ip_entry.text()) {
+        //         Ok(address) => ip_packet.set_destination(address),
+        //         Err(_) => {
+        //             error("Incorrect destination ip address.");
+        //             return None;
+        //         }
+        //     }
+        // }
 
         if self.tcp_button.is_active() {
-            let packet = MutableTcpPacket::owned(vec![0u8; MutableTcpPacket::minimum_packet_size()]);
+            // let packet = MutableTcpPacket::owned(vec![0u8; MutableTcpPacket::minimum_packet_size()]);
         }
 
         if self.udp_button.is_active() {
-            let packet = MutableUdpPacket::owned(vec![0u8; MutableUdpPacket::minimum_packet_size()]);
+            let mut udp = UDPWindow::full();
+            udp.show();
+            // let packet = MutableUdpPacket::owned(vec![0u8; MutableUdpPacket::minimum_packet_size()]);
         }
 
-        panic!("Unknown protocol value.");
+        // panic!("Unknown protocol value.");
+
+        None
+    }
+
+    pub fn pack_and_send(data: &[u8]) {
+
     }
 }
