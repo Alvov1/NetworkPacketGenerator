@@ -1,27 +1,81 @@
-use gtk::{Align, Button, Entry, Grid, Label, Window};
-use gtk::prelude::{BoxExt, EditableExt, GridExt, GtkWindowExt, WidgetExt};
+use gtk::prelude::*;
 use pnet::packet::udp::MutableUdpPacket;
 use crate::error_window::error;
+use crate::icmp::IcmpOptions;
 
-struct UDPWidgets {
-    src_port: Entry,
-    dest_port: Entry,
-    length: Entry,
-    checksum: Entry,
-    data: Entry
+pub(crate) struct UdpOptions {
+    src_port: gtk::Entry,
+    dest_port: gtk::Entry,
+    length: gtk::Entry,
+    checksum: gtk::Entry,
+    data: gtk::Entry
 }
-impl UDPWidgets {
-    fn new() -> UDPWidgets {
-        UDPWidgets {
-            src_port: Entry::builder().placeholder_text("Port").build(),
-            dest_port: Entry::builder().placeholder_text("Port").build(),
-            length: Entry::builder().placeholder_text("Length").build(),
-            checksum: Entry::builder().placeholder_text("Checksum").build(),
-            data: Entry::builder().placeholder_text("Data").build()
-        }
+impl UdpOptions {
+    pub(crate) fn show_window() {
+        let widgets = UdpOptions::new();
+
+        let dialog = gtk::Dialog::with_buttons(
+            Some("UDP options"),
+            Some(&gtk::Window::new()),
+            gtk::DialogFlags::USE_HEADER_BAR,
+            &[("Ok", gtk::ResponseType::Ok), ("Cancel", gtk::ResponseType::Cancel)]);
+        dialog.content_area().append(&Self::generate_ui(&widgets));
+
+        dialog.connect_response(move |dialog, response| {
+            match response {
+                gtk::ResponseType::Ok => {
+                    let packet = widgets.build_packet();
+                    dialog.close();
+                },
+                gtk::ResponseType::Cancel => {
+                    dialog.close();
+                },
+                _ => {}
+            }
+        });
+
+        dialog.show();
     }
 
-    fn collect(&self) -> Option<MutableUdpPacket> {
+    pub(crate) fn generate_ui(&self) -> gtk::Box {
+        let fields_grid = self.prepare_ui_fields();
+
+        let lower_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
+            .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).margin_start(24).margin_end(24).build();
+        lower_box.append(&gtk::Label::new(Some("Data"))); lower_box.append(&self.data);
+
+        let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical)
+            .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).margin_top(24).margin_bottom(24).build();
+        main_box.append(&fields_grid); main_box.append(&lower_box);
+
+        main_box
+    }
+    pub(crate) fn prepare_ui_fields(&self) -> gtk::Grid {
+        let grid = gtk::Grid::builder().margin_start(24).margin_end(24).margin_top(24).margin_bottom(24).row_spacing(24)
+            .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(24).build();
+
+        grid.attach(&gtk::Label::builder().label("Source port").halign(gtk::Align::Start).build(),       0, 0, 1, 1);
+        grid.attach(&self.src_port,                          1, 0, 1, 1);
+        grid.attach(&gtk::Label::builder().label("Destination port").halign(gtk::Align::Start).build(),  2, 0, 1, 1);
+        grid.attach(&self.dest_port,                         3, 0, 1, 1);
+        grid.attach(&gtk::Label::builder().label("Length").halign(gtk::Align::Start).build(),            0, 1, 1, 1);
+        grid.attach(&self.length,                            1, 1, 1, 1);
+        grid.attach(&gtk::Label::builder().label("Checksum").halign(gtk::Align::Start).build(),          2, 1, 1, 1);
+        grid.attach(&self.checksum,                          3, 1, 1, 1);
+        
+        grid
+    }
+    
+    pub(crate) fn new() -> UdpOptions {
+        UdpOptions {
+            src_port: gtk::Entry::builder().placeholder_text("Port..").build(),
+            dest_port: gtk::Entry::builder().placeholder_text("Port..").build(),
+            length: gtk::Entry::builder().placeholder_text("Length..").build(),
+            checksum: gtk::Entry::builder().placeholder_text("Checksum..").build(),
+            data: gtk::Entry::builder().placeholder_text("Data..").build()
+        }
+    }
+    fn build_packet(&self) -> Option<MutableUdpPacket> {
         let mut packet = MutableUdpPacket::owned(vec![0u8; MutableUdpPacket::minimum_packet_size()]).unwrap();
 
         match self.src_port.text().parse::<u16>() {
@@ -44,75 +98,4 @@ impl UDPWidgets {
 
         return Some(packet);
     }
-}
-
-pub struct UDPWindow {
-    widgets: UDPWidgets,
-    window: Window
-}
-impl UDPWindow {
-    pub(crate) fn full() -> UDPWindow {
-        let widgets = UDPWidgets::new();
-
-        let window = Window::builder().title("UDP settings")
-            .default_width(400).default_height(200).build();
-
-        let grid = Grid::builder().margin_start(24).margin_end(24).row_spacing(24)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(24).build();
-
-        grid.attach(&Label::builder().label("Source port").halign(Align::Start).build(),       0, 0, 1, 1);
-        grid.attach(&widgets.src_port,                          1, 0, 1, 1);
-        grid.attach(&Label::builder().label("Destination port").halign(Align::Start).build(),  2, 0, 1, 1);
-        grid.attach(&widgets.dest_port,                         3, 0, 1, 1);
-        grid.attach(&Label::builder().label("Length").halign(Align::Start).build(),            0, 1, 1, 1);
-        grid.attach(&widgets.length,                            1, 1, 1, 1);
-        grid.attach(&Label::builder().label("Checksum").halign(Align::Start).build(),          2, 1, 1, 1);
-        grid.attach(&widgets.checksum,                          3, 1, 1, 1);
-
-        let lower_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).margin_start(24).margin_end(24).build();
-        let send = Button::with_label("Send"); let cancel = Button::with_label("Cancel");
-        lower_box.append(&Label::new(Some("Data"))); lower_box.append(&widgets.data);
-        lower_box.append(&send); lower_box.append(&cancel);
-
-        let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
-        main_box.append(&grid); main_box.append(&lower_box);
-
-        window.set_child(Some(&main_box));
-
-        UDPWindow { widgets, window }
-    }
-    pub(crate) fn icmp() -> UDPWindow {
-        let widgets = UDPWidgets::new();
-
-        let window = Window::builder().title("UDP settings")
-            .default_width(400).default_height(200).build();
-
-        let grid = Grid::builder().margin_start(24).margin_end(24).row_spacing(24)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).column_spacing(24).build();
-
-        grid.attach(&Label::builder().label("Source port").halign(Align::Start).build(),       0, 0, 1, 1);
-        grid.attach(&widgets.src_port,                          1, 0, 1, 1);
-        grid.attach(&Label::builder().label("Destination port").halign(Align::Start).build(),  2, 0, 1, 1);
-        grid.attach(&widgets.dest_port,                         3, 0, 1, 1);
-        grid.attach(&Label::builder().label("Length").halign(Align::Start).build(),            0, 1, 1, 1);
-        grid.attach(&widgets.length,                            1, 1, 1, 1);
-        grid.attach(&Label::builder().label("Checksum").halign(Align::Start).build(),          2, 1, 1, 1);
-        grid.attach(&widgets.checksum,                          3, 1, 1, 1);
-
-        let lower_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
-            .halign(gtk::Align::End).valign(gtk::Align::Center).spacing(24).margin_start(24).margin_end(24).build();
-        let next = Button::with_label("Next"); let cancel = Button::with_label("Cancel");
-        lower_box.append(&next); lower_box.append(&cancel);
-
-        let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical)
-            .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
-        main_box.append(&grid); main_box.append(&lower_box);
-
-        window.set_child(Some(&main_box));
-
-        UDPWindow { widgets, window }
-    }
-    pub(crate) fn show(&self) { self.window.show(); }
 }

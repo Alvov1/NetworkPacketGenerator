@@ -1,18 +1,15 @@
-extern crate core;
-
 use std::sync::{Arc, Mutex};
-use gtk::{Application, ApplicationWindow, Button};
-use gtk::prelude::{ApplicationExt, ApplicationExtManual, BoxExt, ButtonExt, GtkWindowExt, WidgetExt};
+use gtk::prelude::*;
+use crate::widgets::MainWindow;
 
 mod database;
-mod gui;
 mod widgets;
 mod error_window;
 mod icmp;
 mod udp;
 
 fn main() {
-    let application = Application::builder()
+    let application = gtk::Application::builder()
         .application_id("Network Packet Generator")
         .build();
 
