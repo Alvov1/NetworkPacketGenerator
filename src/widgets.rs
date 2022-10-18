@@ -1,8 +1,9 @@
 use std::net::Ipv4Addr;
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 use glib::ObjectExt;
-use gtk::{Button, CheckButton, ComboBoxText, DropDown, Entry, Label, Window};
-use gtk::prelude::{ButtonExt, CheckButtonExt, EditableExt, GtkWindowExt};
+use gtk::{Application, ApplicationWindow, Button, CheckButton, ComboBoxText, DropDown, Entry, Label, Window};
+use gtk::prelude::{BoxExt, ButtonExt, CheckButtonExt, EditableExt, GtkWindowExt, WidgetExt};
 
 use pnet::packet::ipv4::MutableIpv4Packet;
 use pnet::packet::icmp::MutableIcmpPacket;
@@ -10,10 +11,11 @@ use pnet::packet::tcp::MutableTcpPacket;
 use pnet::packet::udp::MutableUdpPacket;
 use pnet::packet::ethernet::MutableEthernetPacket;
 use crate::error_window::error;
+use crate::gui;
 use crate::icmp::ICMPWindow;
 use crate::udp::UDPWindow;
 
-pub struct MyWidgets {
+pub struct MainWindowWidgets {
     pub interface_list: ComboBoxText,
 
     pub ip_button: CheckButton,
@@ -56,10 +58,9 @@ pub struct MyWidgets {
 
     pub tcp_reserved_bits: (CheckButton, CheckButton, CheckButton, CheckButton)
 }
-
-impl MyWidgets {
-    pub fn new() -> MyWidgets {
-        MyWidgets {
+impl MainWindowWidgets {
+    pub fn new() -> Self {
+        Self {
             interface_list: ComboBoxText::new(),
             ip_button: CheckButton::builder().label("IP").active(true).build(),
             icmp_button: CheckButton::with_label("ICMP"),
@@ -105,48 +106,45 @@ impl MyWidgets {
                                 CheckButton::with_label("3"), CheckButton::with_label("4"))
         }
     }
+}
 
-    pub fn collect(&self) -> Option<MutableEthernetPacket> {
-        // let mut buffer: Option<&[u8]> = None;
-        if self.icmp_button.is_active() {
-            let mut udp = UDPWindow::icmp();
-            udp.show();
-        }
-        // let mut ip_packet = MutableIpv4Packet::owned(vec![0u8; MutableIpv4Packet::minimum_packet_size()]).unwrap();
+pub struct MainWindow {
+    widgets: MainWindowWidgets,
+    window: ApplicationWindow
+}
+impl MainWindow {
+    fn new(app: &Application) -> Self {
+        let window = ApplicationWindow::builder().application(app)
+            .title("Network Packet Generator").default_width(900).default_height(500).build();
 
-        // /* Set ip addresses. */ {
-        //     match Ipv4Addr::from_str(&*self.src_ip_entry.text()) {
-        //         Ok(address) => ip_packet.set_source(address),
-        //         Err(_) => {
-        //             error("Incorrect source ip address.");
-        //             return None;
-        //         }
-        //     }
-        //     match Ipv4Addr::from_str(&*self.dest_ip_entry.text()) {
-        //         Ok(address) => ip_packet.set_destination(address),
-        //         Err(_) => {
-        //             error("Incorrect destination ip address.");
-        //             return None;
-        //         }
-        //     }
-        // }
+        let container = gtk::Box::builder().orientation(gtk::Orientation::Vertical).margin_top(24).margin_bottom(24)
+            .margin_start(24).margin_end(24).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
 
-        if self.tcp_button.is_active() {
-            // let packet = MutableTcpPacket::owned(vec![0u8; MutableTcpPacket::minimum_packet_size()]);
-        }
+        let widgets = Arc::new(Mutex::new(MainWindowWidgets::new()));
 
-        if self.udp_button.is_active() {
-            let mut udp = UDPWindow::full();
-            udp.show();
-            // let packet = MutableUdpPacket::owned(vec![0u8; MutableUdpPacket::minimum_packet_size()]);
-        }
+        let ip_protocol_table = gui::init_interface_protocol_section(&widgets.lock().unwrap());
+        let main_button = Button::with_label("Collect");
+        let pointer = widgets.clone();
+        main_button.connect_clicked(move |_| {
+            pointer.lock().unwrap().collect();
+        });
+        ip_protocol_table.append(&main_button);
+        container.append(&ip_protocol_table);
 
-        // panic!("Unknown protocol value.");
+        let mac_address_table = gui::generate_address_table(&widgets.lock().unwrap());
+        container.append(&mac_address_table);
 
-        None
-    }
+        let buttons = gui::generate_utility_buttons(&widgets.lock().unwrap());
+        container.append(&buttons);
 
-    pub fn pack_and_send(data: &[u8]) {
+        let ip_options = gui::generate_ip_section(&widgets.lock().unwrap());
+        container.append(&ip_options);
 
+        let tcp_options = gui::generate_tcp_section(&widgets.lock().unwrap());
+        container.append(&tcp_options);
+
+        window.set_child(Some(&container));
+
+        Self { widgets: MainWindowWidgets::new(), window }
     }
 }

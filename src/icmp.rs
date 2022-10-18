@@ -1,7 +1,8 @@
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use gtk::{Button, DropDown, Entry, Grid, Label, Window};
-use gtk::prelude::{BoxExt, ButtonExt, EditableExt, GridExt, GtkWindowExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, EditableExt, GridExt, GtkWindowExt, SettingsExtManual, WidgetExt};
 use pnet::packet::icmp::{IcmpCode, IcmpTypes, MutableIcmpPacket};
 use crate::error_window::error;
 use crate::main;
@@ -15,7 +16,7 @@ struct ICMPWidgets {
 impl ICMPWidgets {
     fn new() -> ICMPWidgets {
         ICMPWidgets {
-            type_dropdown: gtk::DropDown::from_strings(&["Request", "Response"]),
+            type_dropdown: DropDown::from_strings(&["Request", "Response"]),
             code_entry: Entry::builder().placeholder_text("ICMP code..").build(),
             checksum_entry: Entry::builder().placeholder_text("ICMP checksum..").build(),
             rest_entry: Entry::builder().placeholder_text("Rest of the header").build(),
@@ -50,7 +51,7 @@ pub struct ICMPWindow {
     pub window: Window
 }
 impl ICMPWindow {
-    pub fn new() -> ICMPWindow {
+    pub fn new(next: &Button, cancel: &Button) -> ICMPWindow {
         let widgets = ICMPWidgets::new();
         let window = Window::builder().title("ICMP settings").default_width(400).default_height(200).build();
 
@@ -71,8 +72,7 @@ impl ICMPWindow {
 
         let lower_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
             .halign(gtk::Align::End).valign(gtk::Align::Center).spacing(24).margin_start(24).margin_end(24).build();
-        let send = Button::with_label("Send"); let cancel = Button::with_label("Cancel");
-        lower_box.append(&send); lower_box.append(&cancel);
+        lower_box.append(next); lower_box.append(cancel);
 
         let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical)
             .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
@@ -83,5 +83,27 @@ impl ICMPWindow {
     }
     pub fn collect(&self) -> Option<MutableIcmpPacket> {
         return self.widgets.collect();
+    }
+    pub fn show(&self) -> MutableIcmpPacket {
+        let mut packet: Arc<Mutex<Option<MutableIcmpPacket>>> = Arc::new(Mutex::new(None));
+
+        MutableIcmpPacket::owned(vec![0u8; MutableIcmpPacket::minimum_packet_size()]).unwrap()
+        // let clone = packet.clone();
+        // self.widgets.next_button.connect_clicked(move |_| {
+        //    self.widgets.collect();
+        //     match self.widgets.collect() {
+        //        Some(value) => { self.window.close(); *clone.lock().unwrap() = Some(value); }
+        //        None => { }
+        //    }
+        // });
+        //
+        // self.widgets.cancel_button.connect_clicked(|_| {
+        //
+        // });
+
+        // while packet.lock().unwrap().is_none() {
+        //     thread::sleep(Duration::from_secs(5));
+        // }
+        // packet.lock().unwrap().unwrap()
     }
 }

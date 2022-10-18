@@ -3,10 +3,10 @@ use gtk::{Button, CheckButton, Frame, Grid, ComboBoxText, Entry, Widget, Buildab
 use gtk::prelude::{BoxExt, ButtonExt, CheckButtonExt, ComboBoxExtManual, GridExt};
 use gtk::prelude::FrameExt;
 use pnet::datalink;
-use crate::MyWidgets;
+use crate::widgets::MainWindowWidgets;
 
 
-pub(crate) fn generate_interface_protocol_section(widgets: &MyWidgets) -> gtk::Box {
+pub(crate) fn init_interface_protocol_section(widgets: &MainWindowWidgets) -> gtk::Box {
     let common_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
         .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
 
@@ -57,7 +57,7 @@ pub(crate) fn generate_interface_protocol_section(widgets: &MyWidgets) -> gtk::B
 
     common_box
 }
-pub(crate) fn generate_address_table(widgets: &MyWidgets) -> Grid {
+pub(crate) fn generate_address_table(widgets: &MainWindowWidgets) -> Grid {
     let grid = Grid::builder().margin_start(24).margin_end(24).halign(gtk::Align::Center)
         .valign(gtk::Align::Center).row_spacing(24).column_spacing(24).build();
 
@@ -71,7 +71,7 @@ pub(crate) fn generate_address_table(widgets: &MyWidgets) -> Grid {
 
     grid
 }
-pub(crate) fn generate_utility_buttons(widgets: &MyWidgets) -> gtk::Box {
+pub(crate) fn generate_utility_buttons(widgets: &MainWindowWidgets) -> gtk::Box {
     let main_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
         .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
 
@@ -90,7 +90,7 @@ pub(crate) fn generate_utility_buttons(widgets: &MyWidgets) -> gtk::Box {
 
     main_box
 }
-pub(crate) fn generate_ip_section(widgets: &MyWidgets) -> Frame {
+pub(crate) fn generate_ip_section(widgets: &MainWindowWidgets) -> Frame {
     /* Result box. */
     let common_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).margin_start(24)
         .margin_end(24).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).margin_bottom(20).build();
@@ -232,7 +232,7 @@ pub(crate) fn generate_ip_section(widgets: &MyWidgets) -> Frame {
 
     box_frame
 }
-pub(crate) fn generate_tcp_section(widgets: &MyWidgets) -> Frame {
+pub(crate) fn generate_tcp_section(widgets: &MainWindowWidgets) -> Frame {
     let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).halign(gtk::Align::Center)
         .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).margin_bottom(20).build();
 
