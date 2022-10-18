@@ -37,7 +37,7 @@ impl UdpOptions {
         dialog.show();
     }
 
-    pub(crate) fn generate_ui(&self) -> gtk::Box {
+    fn generate_ui(&self) -> gtk::Box {
         let fields_grid = self.prepare_ui_fields();
 
         let lower_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
