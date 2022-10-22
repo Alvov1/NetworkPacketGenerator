@@ -4,8 +4,9 @@ use std::sync::{Arc, Mutex};
 use glib::ObjectExt;
 use gtk::prelude::*;
 
-use pnet::packet::{MutablePacket, tcp};
-use pnet::packet::ipv4::MutableIpv4Packet;
+use pnet::packet::{MutablePacket, FromPacket};
+use pnet::packet::ipv4::{Ipv4Option, Ipv4OptionNumber, Ipv4OptionNumbers, MutableIpv4Packet};
+use pnet::packet::ipv4::MutableIpv4OptionPacket;
 use pnet::packet::icmp::MutableIcmpPacket;
 use pnet::packet::tcp::MutableTcpPacket;
 use pnet::packet::udp::MutableUdpPacket;
@@ -15,6 +16,7 @@ use crate::error_window::error;
 use crate::udp::UdpOptions;
 use crate::icmp::IcmpOptions;
 use pnet::datalink;
+use pnet::packet::ip::IpNextHeaderProtocol;
 use crate::{icmp, udp};
 
 struct IPWidgets {
@@ -22,16 +24,17 @@ struct IPWidgets {
     dest_ip: gtk::Entry,
 
     version: (gtk::CheckButton, gtk::Entry),
-    ihl: (gtk::CheckButton, gtk::Entry),
-    type_of_service: (gtk::CheckButton, gtk::Entry),
     header_length: (gtk::CheckButton, gtk::Entry),
-    checksum: (gtk::CheckButton, gtk::Entry),
+    dscp: (gtk::CheckButton, gtk::Entry),
+    ecn: (gtk::CheckButton, gtk::Entry),
+    packet_length: (gtk::CheckButton, gtk::Entry),
     packet_id: (gtk::CheckButton, gtk::Entry),
-    next_protocol: (gtk::CheckButton, gtk::Entry),
     offset: (gtk::CheckButton, gtk::Entry),
     ttl: (gtk::CheckButton, gtk::Entry),
+    checksum: (gtk::CheckButton, gtk::Entry),
 
     flags: (gtk::CheckButton, gtk::CheckButton, gtk::CheckButton),
+    options: gtk::Entry
 }
 impl IPWidgets {
     fn new() -> Self {
@@ -40,18 +43,20 @@ impl IPWidgets {
             dest_ip: gtk::Entry::builder().placeholder_text("Destination IPv4").build(),
 
             version: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Version").build()),
-            ihl: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("IHL value").build()),
-            type_of_service: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Type of service").build()),
             header_length: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Header length").build()),
-            checksum: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Checksum").build()),
+            dscp: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("DSCP value").build()),
+            ecn: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Explicit congestion").build()),
+            packet_length: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Packet length").build()),
             packet_id: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Packet id").build()),
-            next_protocol: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Next protocol").build()),
-            offset: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Offset").build()),
+            offset: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Fragment offset").build()),
             ttl: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Time to live").build()),
+            checksum: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Header checksum").build()),
 
             flags: (gtk::CheckButton::with_label("DF"),
                     gtk::CheckButton::with_label("MF"),
                     gtk::CheckButton::with_label("Reserved bit")),
+
+            options: gtk::Entry::builder().placeholder_text("Option 1, Option 2, ...").margin_end(6).margin_start(6).margin_top(6).margin_bottom(6).build()
         }
     }
 
@@ -68,7 +73,7 @@ impl IPWidgets {
     }
     fn prepare_options_section(&self) -> gtk::Frame {
         /* Result box. */
-        let common_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).margin_start(24)
+        let upper_common_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).margin_start(24)
             .margin_end(24).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).margin_bottom(20).build();
 
         /* Left side */ {
@@ -81,21 +86,17 @@ impl IPWidgets {
                     let version = gtk::Label::builder().label("Version:").halign(gtk::Align::Start).build();
                     left_grid.attach(&version, 0, 0, 1, 1);
                 }
-                /* IHL */ {
-                    let ihl = gtk::Label::builder().label("IHL:").halign(gtk::Align::Start).build();
-                    left_grid.attach(&ihl, 0, 1, 1, 1);
-                }
-                /* Type of service */ {
-                    let tos = gtk::Label::builder().label("Type of Service:").halign(gtk::Align::Start).build();
-                    left_grid.attach(&tos, 0, 2, 1, 1);
-                }
                 /* Header length */ {
-                    let length = gtk::Label::builder().label("Header Length:").halign(gtk::Align::Start).build();
-                    left_grid.attach(&length, 0, 3, 1, 1);
+                    let header_length = gtk::Label::builder().label("Header length:").halign(gtk::Align::Start).build();
+                    left_grid.attach(&header_length, 0, 1, 1, 1);
                 }
-                /* Header checksum */ {
-                    let checksum = gtk::Label::builder().label("Header Checksum:").halign(gtk::Align::Start).build();
-                    left_grid.attach(&checksum, 0, 4, 1, 1);
+                /* DSCP */ {
+                    let dscp = gtk::Label::builder().label("Differentiated Services CP:").halign(gtk::Align::Start).build();
+                    left_grid.attach(&dscp, 0, 2, 1, 1);
+                }
+                /* ECN */ {
+                    let ecn = gtk::Label::builder().label("Explicit Congestion Notification:").halign(gtk::Align::Start).build();
+                    left_grid.attach(&ecn, 0, 3, 1, 1);
                 }
             }
 
@@ -105,29 +106,24 @@ impl IPWidgets {
                     version_box.append(&self.version.0); version_box.append(&self.version.1);
                     left_grid.attach(&(version_box.clone()), 1, 0, 1, 1);
                 }
-                /* IHL */ {
+                /* Header length */ {
                     let ihl_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-                    ihl_box.append(&self.ihl.0); ihl_box.append(&self.ihl.1);
+                    ihl_box.append(&self.header_length.0); ihl_box.append(&self.header_length.1);
                     left_grid.attach(&(ihl_box.clone()), 1, 1, 1, 1);
                 }
-                /* Type of service */ {
+                /* DSCP */ {
                     let type_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-                    type_box.append(&self.type_of_service.0); type_box.append(&self.type_of_service.1);
+                    type_box.append(&self.dscp.0); type_box.append(&self.dscp.1);
                     left_grid.attach(&(type_box.clone()), 1, 2, 1, 1);
                 }
-                /* Header length */ {
+                /* ECN */ {
                     let length_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-                    length_box.append(&self.header_length.0); length_box.append(&self.header_length.1);
+                    length_box.append(&self.ecn.0); length_box.append(&self.ecn.1);
                     left_grid.attach(&(length_box.clone()), 1, 3, 1, 1);
-                }
-                /* Header checksum */ {
-                    let checksum_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-                    checksum_box.append(&self.checksum.0); checksum_box.append(&self.checksum.1);
-                    left_grid.attach(&(checksum_box.clone()), 1, 4, 1, 1);
                 }
             }
 
-            common_box.append(&left_grid);
+            upper_common_box.append(&left_grid);
         }
 
         /* Right side */ {
@@ -141,34 +137,34 @@ impl IPWidgets {
                     .valign(gtk::Align::Center).row_spacing(24).column_spacing(24).build();
 
                 /* Right grid labels */ {
-                    /* Packet ID */ {
-                        let packet_id = gtk::Label::builder().label("Packet ID:").halign(gtk::Align::Start).build();
-                        right_grid.attach(&packet_id, 0, 0, 1, 1);
+                    /* Total length */ {
+                        let total_length = gtk::Label::builder().label("Packet length:").halign(gtk::Align::Start).build();
+                        right_grid.attach(&total_length, 0, 0, 1, 1);
                     }
-                    /* Protocol */ {
-                        let protocol = gtk::Label::builder().label("Protocol:").halign(gtk::Align::Start).build();
-                        right_grid.attach(&protocol, 0, 1, 1, 1);
+                    /* Packet ID. */ {
+                        let packet_id = gtk::Label::builder().label("Identification:").halign(gtk::Align::Start).build();
+                        right_grid.attach(&packet_id, 0, 1, 1, 1);
                     }
-                    /* Offset */ {
+                    /* Fragment offset. */ {
                         let offset = gtk::Label::builder().label("Fragment offset:").halign(gtk::Align::Start).build();
                         right_grid.attach(&offset, 0, 2, 1, 1);
                     }
-                    /* Time to live */ {
-                        let ttl = gtk::Label::builder().label("Time to Live:").halign(gtk::Align::Start).build();
+                    /* Time to live. */ {
+                        let ttl = gtk::Label::builder().label("Time to live:").halign(gtk::Align::Start).build();
                         right_grid.attach(&ttl, 0, 3, 1, 1);
                     }
                 }
 
                 /* Right grid auto-entry boxes */ {
+                    /* Total length */ {
+                        let checksum_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                        checksum_box.append(&self.packet_length.0); checksum_box.append(&self.packet_length.1);
+                        right_grid.attach(&(checksum_box.clone()), 1, 0, 1, 1);
+                    }
                     /* Packet ID */ {
                         let packet_id_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
                         packet_id_box.append(&self.packet_id.0); packet_id_box.append(&self.packet_id.1);
-                        right_grid.attach(&(packet_id_box.clone()), 1, 0, 1, 1);
-                    }
-                    /* Protocol */ {
-                        let protocol_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-                        protocol_box.append(&self.next_protocol.0); protocol_box.append(&self.next_protocol.1);
-                        right_grid.attach(&(protocol_box.clone()), 1, 1, 1, 1);
+                        right_grid.attach(&(packet_id_box.clone()), 1, 1, 1, 1);
                     }
                     /* Offset */ {
                         let offset_box = gtk::Box::new(gtk::Orientation::Horizontal, 6);
@@ -185,28 +181,259 @@ impl IPWidgets {
                 right_box.append(&right_grid);
             }
 
-            /* Right bottom box */ {
-                /* Right box in the bottom. Specifies flags DF, MF and reserved bit. */
-                let right_down_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).margin_start(12)
-                    .margin_end(12).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
-
-                /* Right grid flags and reserved bits */ {
-                    right_down_box.append(&gtk::Label::new(Some("Flags:")));
-                    right_down_box.append(&self.flags.0);
-                    right_down_box.append(&self.flags.1);
-                    right_down_box.append(&self.flags.2);
-                }
-
-                right_box.append(&right_down_box);
-            }
-
-            common_box.append(&right_box);
+            upper_common_box.append(&right_box);
         }
 
+
+        let bottom_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
+            .margin_bottom(12).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(20).build();
+
+        /* IP options */ {
+            let options_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(6).margin_start(6).margin_end(6).build();
+            options_box.append(&gtk::Label::new(Some("Options"))); options_box.append(&self.options);
+            bottom_box.append(&options_box);
+        }
+
+        /* Flags */ {
+            let flags_frame = gtk::Frame::new(Some("Flags"));
+            let frame_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(6).margin_start(6).margin_end(6).build();
+            frame_box.append(&self.flags.0); frame_box.append(&self.flags.1); frame_box.append(&self.flags.2);
+            bottom_box.append(&gtk::Frame::builder().label("Flags").child(&frame_box).build());
+        }
+
+        /* Checksum */ {
+            let checksum_label = gtk::Label::builder().label("Checksum:").halign(gtk::Align::Start).build();
+            let checksum_box = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+            checksum_box.append(&checksum_label); checksum_box.append(&self.checksum.0);
+            checksum_box.append(&self.checksum.1); bottom_box.append(&checksum_box);
+            bottom_box.append(&checksum_box);
+        }
+
+        let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).halign(gtk::Align::Center).spacing(6).build();
+        main_box.append(&upper_common_box); main_box.append(&bottom_box);
+
         let box_frame = gtk::Frame::builder().label("IP options").build();
-        box_frame.set_child(Some(&common_box));
+        box_frame.set_child(Some(&main_box));
 
         box_frame
+    }
+
+    fn build_packet(&self, next_protocol: IpNextHeaderProtocol) -> Option<Vec<u8>> {
+        let mut packet = MutableIpv4Packet::owned(vec![0u8; MutableIpv4Packet::minimum_packet_size()]).unwrap();
+
+        match Ipv4Addr::from_str(&self.src_ip.text()) {
+            Ok(address) => packet.set_source(address),
+            Err(_) => { error("Bad IPv4 address value"); return None; }
+        }
+        match Ipv4Addr::from_str(&self.dest_ip.text()) {
+            Ok(address) => packet.set_destination(address),
+            Err(_) => { error("Bad IPv4 address value"); return None; }
+        }
+
+        if self.version.0.is_active() {
+            packet.set_version(4);
+        } else {
+            match self.version.1.text().parse::<u8>() {
+                Ok(value) => packet.set_version(value),
+                Err(_) => { error("Bad ip version value"); return None; }
+            }
+        }
+
+        if self.header_length.0.is_active() {
+            packet.set_header_length(5);
+        } else {
+            match self.header_length.1.text().parse::<u8>() {
+                Ok(value) => packet.set_header_length(value),
+                Err(_) => { error("Bad IP header length value"); return None; }
+            }
+        }
+
+        if self.dscp.0.is_active() {
+            packet.set_dscp(4);
+        } else {
+            match self.dscp.1.text().parse::<u8>() {
+                Ok(value) => packet.set_dscp(value),
+                Err(_) => { error("Bad IP DSCP value"); return None; }
+            }
+        }
+
+        if self.ecn.0.is_active() {
+            packet.set_ecn(4);
+        } else {
+            match self.ecn.1.text().parse::<u8>() {
+                Ok(value) => packet.set_ecn(value),
+                Err(_) => { error("Bad IP ECN value"); return None; }
+            }
+        }
+
+        if self.packet_length.0.is_active() {
+            packet.set_total_length(4);
+        } else {
+            match self.packet_length.1.text().parse::<u16>() {
+                Ok(value) => packet.set_total_length(value),
+                Err(_) => { error("Bad IP total length value"); return None; }
+            }
+        }
+
+        if self.packet_id.0.is_active() {
+            packet.set_identification(4);
+        } else {
+            match self.packet_id.1.text().parse::<u16>() {
+                Ok(value) => packet.set_identification(value),
+                Err(_) => { error("Bad IP packet ID value"); return None; }
+            }
+        }
+
+        let mut flags = 0;
+        if self.flags.0.is_active() { flags |= pnet::packet::ipv4::Ipv4Flags::DontFragment; }
+        if self.flags.1.is_active() { flags |= pnet::packet::ipv4::Ipv4Flags::MoreFragments; }
+        if self.flags.2.is_active() { flags |= 0b00000100; }
+        packet.set_flags(flags);
+
+        if self.offset.0.is_active() {
+            packet.set_fragment_offset(4);
+        } else {
+            match self.offset.1.text().parse::<u16>() {
+                Ok(value) => packet.set_fragment_offset(value),
+                Err(_) => { error("Bad IP fragment offset value"); return None; }
+            }
+        }
+
+        if self.ttl.0.is_active() {
+            packet.set_ttl(64);
+        } else {
+            match self.ttl.1.text().parse::<u8>() {
+                Ok(value) => packet.set_ttl(value),
+                Err(_) => { error("Bad IP time to live value"); return None; }
+            }
+        }
+
+        packet.set_next_level_protocol(next_protocol);
+
+        /* Options */ {
+            let mut options = Vec::new();
+            for option in self.options.text().split(',') {
+                match option {
+                    "ADDEXT" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ADDEXT.0));
+                        options.push(t_option.from_packet()) },
+                    "CIPSO" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::CIPSO.0));
+                        options.push(t_option.from_packet()) },
+                    "DPS" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::DPS.0));
+                        options.push(t_option.from_packet()) },
+                    "EIP" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::EIP.0));
+                        options.push(t_option.from_packet()) },
+                    "ENCODE" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ENCODE.0));
+                        options.push(t_option.from_packet()) },
+                    "EOL" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::EOL.0));
+                        options.push(t_option.from_packet()) },
+                    "ESEC" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ESEC.0));
+                        options.push(t_option.from_packet()) },
+                    "EXP" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::EXP.0));
+                        options.push(t_option.from_packet()) },
+                    "FINN" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::FINN.0));
+                        options.push(t_option.from_packet()) },
+                    "IMITD" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::IMITD.0));
+                        options.push(t_option.from_packet()) },
+                    "LSR" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::LSR.0));
+                        options.push(t_option.from_packet()) },
+                    "MTUP" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::MTUP.0));
+                        options.push(t_option.from_packet()) },
+                    "MTUR" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::MTUR.0));
+                        options.push(t_option.from_packet()) },
+                    "NOP" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::NOP.0));
+                        options.push(t_option.from_packet()) },
+                    "QS" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::QS.0));
+                        options.push(t_option.from_packet()) },
+                    "RR" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::RR.0));
+                        options.push(t_option.from_packet()) },
+                    "RTRALT" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::RTRALT.0));
+                        options.push(t_option.from_packet()) },
+                    "SDB" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SDB.0));
+                        options.push(t_option.from_packet()) },
+                    "SEC" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SEC.0));
+                        options.push(t_option.from_packet()) },
+                    "SID" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SID.0));
+                        options.push(t_option.from_packet()) },
+                    "SSR" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SSR.0));
+                        options.push(t_option.from_packet()) },
+                    "TR" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::TR.0));
+                        options.push(t_option.from_packet()) },
+                    "TS" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::TS.0));
+                        options.push(t_option.from_packet()) },
+                    "UMP" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::UMP.0));
+                        options.push(t_option.from_packet()) },
+                    "VISA" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::VISA.0));
+                        options.push(t_option.from_packet()) },
+                    "ZSU" => {
+                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ZSU.0));
+                        options.push(t_option.from_packet()) },
+                    _ => { error("Bad IP options value"); return None; }
+                }
+            }
+            packet.set_options(&options);
+        }
+
+        if self.checksum.0.is_active() {
+            packet.set_checksum(4);
+        } else {
+            match self.checksum.1.text().parse::<u16>() {
+                Ok(value) => packet.set_checksum(value),
+                Err(_) => { error("Bad IP checksum value"); return None; }
+            }
+        }
+
+        Some(Vec::from(packet.payload_mut()))
     }
 }
 
@@ -227,7 +454,7 @@ struct TCPWidgets {
 
     data: gtk::Entry,
 
-    reserved_bits: (gtk::CheckButton, gtk::CheckButton, gtk::CheckButton, gtk::CheckButton)
+    reserved_bits: (gtk::CheckButton, gtk::CheckButton, gtk::CheckButton)
 }
 impl TCPWidgets {
     fn new() -> Self {
@@ -248,9 +475,7 @@ impl TCPWidgets {
 
             data: gtk::Entry::builder().placeholder_text("Enter data").build(),
 
-            reserved_bits: (gtk::CheckButton::with_label("1"), gtk::CheckButton::with_label("2"),
-                            gtk::CheckButton::with_label("3"), gtk::CheckButton::with_label("4"))
-
+            reserved_bits: (gtk::CheckButton::with_label("1"), gtk::CheckButton::with_label("2"), gtk::CheckButton::with_label("3"))
         }
     }
 
@@ -403,7 +628,6 @@ impl TCPWidgets {
                 reserved_bits_box.append(&self.reserved_bits.0);
                 reserved_bits_box.append(&self.reserved_bits.1);
                 reserved_bits_box.append(&self.reserved_bits.2);
-                reserved_bits_box.append(&self.reserved_bits.3);
 
                 let reserved_bits_frame = gtk::Frame::builder().label("Reserved bits").child(&reserved_bits_box).build();
                 lower_box.append(&reserved_bits_frame);
@@ -421,14 +645,14 @@ impl TCPWidgets {
         let mut result = 0u16;
 
         /* ACK SYN PSH FIN RST URG ECE CWR */
-        if self.flags.0.is_active() { result |= tcp::TcpFlags::ACK; }
-        if self.flags.1.is_active() { result |= tcp::TcpFlags::SYN; }
-        if self.flags.2.is_active() { result |= tcp::TcpFlags::PSH; }
-        if self.flags.3.is_active() { result |= tcp::TcpFlags::FIN; }
-        if self.flags.4.is_active() { result |= tcp::TcpFlags::RST; }
-        if self.flags.5.is_active() { result |= tcp::TcpFlags::URG; }
-        if self.flags.6.is_active() { result |= tcp::TcpFlags::ECE; }
-        if self.flags.7.is_active() { result |= tcp::TcpFlags::CWR; }
+        if self.flags.0.is_active() { result |= pnet::packet::tcp::TcpFlags::ACK; }
+        if self.flags.1.is_active() { result |= pnet::packet::tcp::TcpFlags::SYN; }
+        if self.flags.2.is_active() { result |= pnet::packet::tcp::TcpFlags::PSH; }
+        if self.flags.3.is_active() { result |= pnet::packet::tcp::TcpFlags::FIN; }
+        if self.flags.4.is_active() { result |= pnet::packet::tcp::TcpFlags::RST; }
+        if self.flags.5.is_active() { result |= pnet::packet::tcp::TcpFlags::URG; }
+        if self.flags.6.is_active() { result |= pnet::packet::tcp::TcpFlags::ECE; }
+        if self.flags.7.is_active() { result |= pnet::packet::tcp::TcpFlags::CWR; }
 
         result
     }
@@ -475,6 +699,14 @@ impl TCPWidgets {
                 Err(_) => { error("Bad tcp fragment offset number"); return None; }
             }
         }
+
+        packet.set_flags(self.get_flags());
+        let mut reserved = 0u8;
+        if self.reserved_bits.0.is_active() { reserved |= 0b0000_0001; }
+        if self.reserved_bits.1.is_active() { reserved |= 0b0000_0010; }
+        if self.reserved_bits.2.is_active() { reserved |= 0b0000_0100; }
+        packet.set_reserved(reserved);
+
         if self.window.0.is_active() {
             packet.set_window(0)
         } else {
@@ -492,11 +724,11 @@ impl TCPWidgets {
             }
         }
 
-        packet.set_flags(self.get_flags());
 
         packet.set_payload(self.data.text().as_bytes());
 
-        /* Checksum - after all other changes. */
+
+
         if self.checksum.0.is_active() {
             packet.set_checksum(pnet::packet::tcp::ipv4_checksum(
                 &packet.to_immutable(), &addresses.0, &addresses.1));
@@ -543,12 +775,12 @@ impl MainWindowWidgets {
             /* Add main button. */
             let main_button = gtk::Button::with_label("Collect");
             main_button.connect_clicked(move |_| {
-                if self.udp_button.is_active() {
-                    udp::UdpOptions::show_window();
-                }
-                if self.icmp_button.is_active() {
-                    icmp::IcmpOptions::show_window();
-                }
+                // if self.udp_button.is_active() {
+                //     udp::UdpOptions::show_window();
+                // }
+                // if self.icmp_button.is_active() {
+                //     icmp::IcmpOptions::show_window();
+                // }
             });
             section_box.append(&main_button);
 
