@@ -17,10 +17,9 @@ pub(crate) struct IcmpOptions {
     data_entry: gtk::Entry,
 }
 impl IcmpOptions {
-    pub(crate) fn show_window() -> Option<Vec<u8>> {
+    pub(crate) fn show_window(pointer: Arc<Mutex<Option<Vec<u8>>>>) {
         let icmp_widgets = IcmpOptions::new();
         let udp_widgets = UdpOptions::new();
-        let packet: Arc<Mutex<Option<MutableIcmpPacket>>> = Arc::new(Mutex::new(None));
 
         let dialog = gtk::Dialog::with_buttons(
             Some("ICMP options"),
@@ -29,12 +28,11 @@ impl IcmpOptions {
             &[("Ok", gtk::ResponseType::Ok), ("Cancel", gtk::ResponseType::Cancel)]);
         dialog.content_area().append(&icmp_widgets.generate_ui(&udp_widgets));
 
-        let clone = packet.clone();
         dialog.connect_response(move |dialog, response| {
             match response {
                 gtk::ResponseType::Ok => {
                     match icmp_widgets.build_packet() {
-                        Some(value) => *clone.lock().unwrap() = Some(value),
+                        Some(value) => *pointer.lock().unwrap() = Some(Vec::from(value.payload())),
                         None => {}
                     }
                     dialog.close();
@@ -47,11 +45,6 @@ impl IcmpOptions {
         });
 
         dialog.show();
-
-        return match &*packet.clone().lock().unwrap() {
-            Some(value) => Some(Vec::from(value.payload())),
-            None => None
-        }
     }
 
     fn generate_ui(&self, udp_options: &UdpOptions) -> gtk::Box {

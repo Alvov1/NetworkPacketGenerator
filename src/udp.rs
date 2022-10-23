@@ -1,5 +1,7 @@
+use std::sync::Arc;
+use std::sync::Mutex;
 use gtk::prelude::*;
-
+use pnet::packet::Packet;
 use pnet::packet::udp::MutableUdpPacket;
 
 use crate::error_window::error;
@@ -12,7 +14,7 @@ pub(crate) struct UdpOptions {
     data: gtk::Entry
 }
 impl UdpOptions {
-    pub(crate) fn show_window() {
+    pub(crate) fn show_window(pointer: Arc<Mutex<Option<Vec<u8>>>>) {
         let widgets = UdpOptions::new();
 
         let dialog = gtk::Dialog::with_buttons(
@@ -25,7 +27,10 @@ impl UdpOptions {
         dialog.connect_response(move |dialog, response| {
             match response {
                 gtk::ResponseType::Ok => {
-                    let packet = widgets.build_packet();
+                    match widgets.build_packet() {
+                        Some(value) => *pointer.lock().unwrap() = Some(Vec::from(value.payload())),
+                        None => {}
+                    }
                     dialog.close();
                 },
                 gtk::ResponseType::Cancel => {

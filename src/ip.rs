@@ -34,8 +34,8 @@ pub(crate) struct IPWidgets {
 impl IPWidgets {
     pub(crate) fn new() -> Self {
         Self {
-            src_ip: gtk::Entry::builder().placeholder_text("Source IPv4").build(),
-            dest_ip: gtk::Entry::builder().placeholder_text("Destination IPv4").build(),
+            src_ip: gtk::Entry::builder().placeholder_text("Source IPv4").text("127.0.0.1").build(),
+            dest_ip: gtk::Entry::builder().placeholder_text("Destination IPv4").text("127.0.0.1").build(),
 
             version: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Version").build()),
             header_length: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Header length").build()),
@@ -213,6 +213,7 @@ impl IPWidgets {
     }
 
     fn get_options(&self) -> Option<Vec<Ipv4Option>> {
+        if self.options.text().is_empty() { return None; }
         let mut options: Vec<Ipv4Option> = Vec::new();
         for option in self.options.text().split(',').map(|v| v.trim()) {
             match option {
@@ -320,22 +321,30 @@ impl IPWidgets {
                     let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
                     t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ZSU.0));
                     options.push(t_option.from_packet()) },
-                _ => { return None; }
+                _ => { error("Bad IP option value."); return None; }
             }
         }
         return Some(options);
     }
-    fn build_packet(&self, next_protocol: IpNextHeaderProtocol) -> Option<Vec<u8>> {
+    pub(crate) fn get_addresses(&self) -> Option<(Ipv4Addr, Ipv4Addr)> {
+        let src = match Ipv4Addr::from_str(&self.src_ip.text()) {
+            Ok(address) => address,
+            Err(_) => { error("Bad IPv4 address value"); return None; }
+        };
+        let dest = match Ipv4Addr::from_str(&self.dest_ip.text()) {
+            Ok(address) => address,
+            Err(_) => { error("Bad IPv4 address value"); return None; }
+        };
+
+        Some((src, dest))
+    }
+    pub(crate) fn build_empty(&self, next_protocol: IpNextHeaderProtocol) -> Option<Vec<u8>> {
+        return self.build_packet(next_protocol, &Vec::new());
+    }
+    pub(crate) fn build_packet(&self, next_protocol: IpNextHeaderProtocol, data: &[u8]) -> Option<Vec<u8>> {
         let mut packet = MutableIpv4Packet::owned(vec![0u8; MutableIpv4Packet::minimum_packet_size()]).unwrap();
 
-        match Ipv4Addr::from_str(&self.src_ip.text()) {
-            Ok(address) => packet.set_source(address),
-            Err(_) => { error("Bad IPv4 address value"); return None; }
-        }
-        match Ipv4Addr::from_str(&self.dest_ip.text()) {
-            Ok(address) => packet.set_destination(address),
-            Err(_) => { error("Bad IPv4 address value"); return None; }
-        }
+        let addresses = self.get_addresses();
 
         if self.version.0.is_active() {
             packet.set_version(4);
@@ -419,11 +428,13 @@ impl IPWidgets {
 
         match self.get_options() {
             Some(options) => packet.set_options(&options),
-            None => { error("Bad IP options value."); return None; }
+            None => {}
         };
 
+        packet.set_payload(data);
+
         if self.checksum.0.is_active() {
-            packet.set_checksum(4);
+            packet.set_checksum(pnet::packet::ipv4::checksum(&packet.to_immutable()));
         } else {
             match self.checksum.1.text().parse::<u16>() {
                 Ok(value) => packet.set_checksum(value),

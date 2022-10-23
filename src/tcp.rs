@@ -286,7 +286,7 @@ impl TCPWidgets {
         }
         return Some(options);
     }
-    fn build_packet(&self, addresses: (Ipv4Addr, Ipv4Addr)) -> Option<Vec<u8>> {
+    pub(crate) fn build_packet(&self, addresses: (Ipv4Addr, Ipv4Addr)) -> Option<Vec<u8>> {
         let mut packet = MutableTcpPacket::owned(vec![0u8; MutableTcpPacket::minimum_packet_size()]).unwrap();
 
         if self.source_port.0.is_active() {
