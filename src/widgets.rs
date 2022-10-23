@@ -8,7 +8,7 @@ use pnet::packet::{MutablePacket, FromPacket};
 use pnet::packet::ipv4::{Ipv4Option, Ipv4OptionNumber, Ipv4OptionNumbers, MutableIpv4Packet};
 use pnet::packet::ipv4::MutableIpv4OptionPacket;
 use pnet::packet::icmp::MutableIcmpPacket;
-use pnet::packet::tcp::MutableTcpPacket;
+use pnet::packet::tcp::{MutableTcpPacket, MutableTcpOptionPacket, TcpOption, TcpOptionNumbers};
 use pnet::packet::udp::MutableUdpPacket;
 use pnet::packet::ethernet::MutableEthernetPacket;
 
@@ -50,7 +50,8 @@ impl IPWidgets {
             packet_id: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Packet id").build()),
             offset: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Fragment offset").build()),
             ttl: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Time to live").build()),
-            checksum: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Header checksum").build()),
+            checksum: (gtk::CheckButton::builder().label("Auto").active(true).build(),
+                       gtk::Entry::builder().placeholder_text("Header checksum").margin_end(6).margin_start(6).margin_top(6).margin_bottom(6).build()),
 
             flags: (gtk::CheckButton::with_label("DF"),
                     gtk::CheckButton::with_label("MF"),
@@ -186,27 +187,25 @@ impl IPWidgets {
 
 
         let bottom_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal)
-            .margin_bottom(12).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(20).build();
+            .margin_bottom(12).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(30).build();
 
         /* IP options */ {
-            let options_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(6).margin_start(6).margin_end(6).build();
-            options_box.append(&gtk::Label::new(Some("Options"))); options_box.append(&self.options);
+            let options_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(6).build();
+
+            options_box.append(&gtk::Label::new(Some("Options:"))); options_box.append(&self.options);
             bottom_box.append(&options_box);
         }
 
         /* Flags */ {
-            let flags_frame = gtk::Frame::new(Some("Flags"));
             let frame_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(6).margin_start(6).margin_end(6).build();
             frame_box.append(&self.flags.0); frame_box.append(&self.flags.1); frame_box.append(&self.flags.2);
             bottom_box.append(&gtk::Frame::builder().label("Flags").child(&frame_box).build());
         }
 
         /* Checksum */ {
-            let checksum_label = gtk::Label::builder().label("Checksum:").halign(gtk::Align::Start).build();
-            let checksum_box = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-            checksum_box.append(&checksum_label); checksum_box.append(&self.checksum.0);
+            let checksum_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(6).build();
+            checksum_box.append(&gtk::Label::new(Some("Checksum:"))); checksum_box.append(&self.checksum.0);
             checksum_box.append(&self.checksum.1); bottom_box.append(&checksum_box);
-            bottom_box.append(&checksum_box);
         }
 
         let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).halign(gtk::Align::Center).spacing(6).build();
@@ -218,6 +217,119 @@ impl IPWidgets {
         box_frame
     }
 
+    fn get_options(&self) -> Option<Vec<Ipv4Option>> {
+        let mut options: Vec<Ipv4Option> = Vec::new();
+        for option in self.options.text().split(',').map(|v| v.trim()) {
+            match option {
+                "ADDEXT" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ADDEXT.0));
+                    options.push(t_option.from_packet()) },
+                "CIPSO" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::CIPSO.0));
+                    options.push(t_option.from_packet()) },
+                "DPS" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::DPS.0));
+                    options.push(t_option.from_packet()) },
+                "EIP" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::EIP.0));
+                    options.push(t_option.from_packet()) },
+                "ENCODE" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ENCODE.0));
+                    options.push(t_option.from_packet()) },
+                "EOL" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::EOL.0));
+                    options.push(t_option.from_packet()) },
+                "ESEC" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ESEC.0));
+                    options.push(t_option.from_packet()) },
+                "EXP" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::EXP.0));
+                    options.push(t_option.from_packet()) },
+                "FINN" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::FINN.0));
+                    options.push(t_option.from_packet()) },
+                "IMITD" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::IMITD.0));
+                    options.push(t_option.from_packet()) },
+                "LSR" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::LSR.0));
+                    options.push(t_option.from_packet()) },
+                "MTUP" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::MTUP.0));
+                    options.push(t_option.from_packet()) },
+                "MTUR" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::MTUR.0));
+                    options.push(t_option.from_packet()) },
+                "NOP" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::NOP.0));
+                    options.push(t_option.from_packet()) },
+                "QS" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::QS.0));
+                    options.push(t_option.from_packet()) },
+                "RR" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::RR.0));
+                    options.push(t_option.from_packet()) },
+                "RTRALT" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::RTRALT.0));
+                    options.push(t_option.from_packet()) },
+                "SDB" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SDB.0));
+                    options.push(t_option.from_packet()) },
+                "SEC" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SEC.0));
+                    options.push(t_option.from_packet()) },
+                "SID" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SID.0));
+                    options.push(t_option.from_packet()) },
+                "SSR" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SSR.0));
+                    options.push(t_option.from_packet()) },
+                "TR" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::TR.0));
+                    options.push(t_option.from_packet()) },
+                "TS" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::TS.0));
+                    options.push(t_option.from_packet()) },
+                "UMP" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::UMP.0));
+                    options.push(t_option.from_packet()) },
+                "VISA" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::VISA.0));
+                    options.push(t_option.from_packet()) },
+                "ZSU" => {
+                    let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
+                    t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ZSU.0));
+                    options.push(t_option.from_packet()) },
+                _ => { return None; }
+            }
+        }
+        return Some(options);
+    }
     fn build_packet(&self, next_protocol: IpNextHeaderProtocol) -> Option<Vec<u8>> {
         let mut packet = MutableIpv4Packet::owned(vec![0u8; MutableIpv4Packet::minimum_packet_size()]).unwrap();
 
@@ -310,119 +422,10 @@ impl IPWidgets {
 
         packet.set_next_level_protocol(next_protocol);
 
-        /* Options */ {
-            let mut options = Vec::new();
-            for option in self.options.text().split(',') {
-                match option {
-                    "ADDEXT" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ADDEXT.0));
-                        options.push(t_option.from_packet()) },
-                    "CIPSO" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::CIPSO.0));
-                        options.push(t_option.from_packet()) },
-                    "DPS" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::DPS.0));
-                        options.push(t_option.from_packet()) },
-                    "EIP" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::EIP.0));
-                        options.push(t_option.from_packet()) },
-                    "ENCODE" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ENCODE.0));
-                        options.push(t_option.from_packet()) },
-                    "EOL" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::EOL.0));
-                        options.push(t_option.from_packet()) },
-                    "ESEC" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ESEC.0));
-                        options.push(t_option.from_packet()) },
-                    "EXP" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::EXP.0));
-                        options.push(t_option.from_packet()) },
-                    "FINN" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::FINN.0));
-                        options.push(t_option.from_packet()) },
-                    "IMITD" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::IMITD.0));
-                        options.push(t_option.from_packet()) },
-                    "LSR" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::LSR.0));
-                        options.push(t_option.from_packet()) },
-                    "MTUP" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::MTUP.0));
-                        options.push(t_option.from_packet()) },
-                    "MTUR" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::MTUR.0));
-                        options.push(t_option.from_packet()) },
-                    "NOP" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::NOP.0));
-                        options.push(t_option.from_packet()) },
-                    "QS" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::QS.0));
-                        options.push(t_option.from_packet()) },
-                    "RR" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::RR.0));
-                        options.push(t_option.from_packet()) },
-                    "RTRALT" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::RTRALT.0));
-                        options.push(t_option.from_packet()) },
-                    "SDB" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SDB.0));
-                        options.push(t_option.from_packet()) },
-                    "SEC" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SEC.0));
-                        options.push(t_option.from_packet()) },
-                    "SID" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SID.0));
-                        options.push(t_option.from_packet()) },
-                    "SSR" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::SSR.0));
-                        options.push(t_option.from_packet()) },
-                    "TR" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::TR.0));
-                        options.push(t_option.from_packet()) },
-                    "TS" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::TS.0));
-                        options.push(t_option.from_packet()) },
-                    "UMP" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::UMP.0));
-                        options.push(t_option.from_packet()) },
-                    "VISA" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::VISA.0));
-                        options.push(t_option.from_packet()) },
-                    "ZSU" => {
-                        let mut t_option = MutableIpv4OptionPacket::owned(vec![0u8; MutableIpv4OptionPacket::minimum_packet_size()]).unwrap();
-                        t_option.set_number(Ipv4OptionNumber::new(Ipv4OptionNumbers::ZSU.0));
-                        options.push(t_option.from_packet()) },
-                    _ => { error("Bad IP options value"); return None; }
-                }
-            }
-            packet.set_options(&options);
-        }
+        match self.get_options() {
+            Some(options) => packet.set_options(&options),
+            None => { error("Bad IP options value."); return None; }
+        };
 
         if self.checksum.0.is_active() {
             packet.set_checksum(4);
@@ -454,7 +457,9 @@ struct TCPWidgets {
 
     data: gtk::Entry,
 
-    reserved_bits: (gtk::CheckButton, gtk::CheckButton, gtk::CheckButton)
+    reserved_bits: (gtk::CheckButton, gtk::CheckButton, gtk::CheckButton),
+
+    options: gtk::Entry
 }
 impl TCPWidgets {
     fn new() -> Self {
@@ -473,9 +478,10 @@ impl TCPWidgets {
                     gtk::CheckButton::with_label("RST"), gtk::CheckButton::with_label("URG"),
                     gtk::CheckButton::with_label("ECE"), gtk::CheckButton::with_label("CWR")),
 
-            data: gtk::Entry::builder().placeholder_text("Enter data").build(),
+            data: gtk::Entry::builder().placeholder_text("Enter data").margin_end(6).margin_start(6).margin_top(6).margin_bottom(6).build(),
 
-            reserved_bits: (gtk::CheckButton::with_label("1"), gtk::CheckButton::with_label("2"), gtk::CheckButton::with_label("3"))
+            reserved_bits: (gtk::CheckButton::with_label("1"), gtk::CheckButton::with_label("2"), gtk::CheckButton::with_label("3")),
+            options: gtk::Entry::builder().placeholder_text("Option 1, Option 2 ...").margin_end(6).margin_start(6).margin_top(6).margin_bottom(6).build()
         }
     }
 
@@ -614,12 +620,14 @@ impl TCPWidgets {
 
         /* Lower box. */ {
             let lower_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
-                .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
+                .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(30).build();
 
-            /* Data label */
-            lower_box.append(&gtk::Label::new(Some("Data (Various):")));
-            /* Data text entry */
-            lower_box.append(&self.data);
+            /* Options */ {
+                let options_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(6).build();
+                options_box.append(&gtk::Label::new(Some("Options: ")));
+                options_box.append(&self.options);
+                lower_box.append(&options_box);
+            }
 
             /* Reserved bits frame */ {
                 let reserved_bits_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).margin_start(24)
@@ -631,6 +639,13 @@ impl TCPWidgets {
 
                 let reserved_bits_frame = gtk::Frame::builder().label("Reserved bits").child(&reserved_bits_box).build();
                 lower_box.append(&reserved_bits_frame);
+            }
+
+            /* Data */ {
+                let data_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(6).build();
+                data_box.append(&gtk::Label::new(Some("Data (Various):")));
+                data_box.append(&self.data);
+                lower_box.append(&data_box);
             }
 
             main_box.append(&lower_box);
@@ -656,6 +671,50 @@ impl TCPWidgets {
 
         result
     }
+    fn get_options(&self) -> Option<Vec<TcpOption>> {
+        let mut options: Vec<TcpOption> = Vec::new();
+        for option in self.options.text().split(',').map(|v| v.trim()) {
+            match option {
+                "EOL" => {
+                    let mut packet = MutableTcpOptionPacket::owned(vec![0u8; MutableTcpOptionPacket::minimum_packet_size()]).unwrap();
+                    packet.set_number(TcpOptionNumbers::EOL);
+                    options.push(packet.from_packet());
+                },
+                "MSS" => {
+                    let mut packet = MutableTcpOptionPacket::owned(vec![0u8; MutableTcpOptionPacket::minimum_packet_size()]).unwrap();
+                    packet.set_number(TcpOptionNumbers::MSS);
+                    options.push(packet.from_packet());
+                },
+                "NOP" => {
+                    let mut packet = MutableTcpOptionPacket::owned(vec![0u8; MutableTcpOptionPacket::minimum_packet_size()]).unwrap();
+                    packet.set_number(TcpOptionNumbers::NOP);
+                    options.push(packet.from_packet());
+                },
+                "SACK" => {
+                    let mut packet = MutableTcpOptionPacket::owned(vec![0u8; MutableTcpOptionPacket::minimum_packet_size()]).unwrap();
+                    packet.set_number(TcpOptionNumbers::SACK);
+                    options.push(packet.from_packet());
+                },
+                "SACK_PERMITTED" => {
+                    let mut packet = MutableTcpOptionPacket::owned(vec![0u8; MutableTcpOptionPacket::minimum_packet_size()]).unwrap();
+                    packet.set_number(TcpOptionNumbers::SACK_PERMITTED);
+                    options.push(packet.from_packet());
+                },
+                "TIMESTAMPS" => {
+                    let mut packet = MutableTcpOptionPacket::owned(vec![0u8; MutableTcpOptionPacket::minimum_packet_size()]).unwrap();
+                    packet.set_number(TcpOptionNumbers::TIMESTAMPS);
+                    options.push(packet.from_packet());
+                },
+                "WSCALE" => {
+                    let mut packet = MutableTcpOptionPacket::owned(vec![0u8; MutableTcpOptionPacket::minimum_packet_size()]).unwrap();
+                    packet.set_number(TcpOptionNumbers::WSCALE);
+                    options.push(packet.from_packet());
+                },
+                _ => { return None; }
+            }
+        }
+        return Some(options);
+    }
     fn build_packet(&self, addresses: (Ipv4Addr, Ipv4Addr)) -> Option<Vec<u8>> {
         let mut packet = MutableTcpPacket::owned(vec![0u8; MutableTcpPacket::minimum_packet_size()]).unwrap();
 
@@ -664,17 +723,19 @@ impl TCPWidgets {
         } else {
             match self.source_port.1.text().parse::<u16>() {
                 Ok(value) => packet.set_source(value),
-                Err(_) => { error("Bad source port tcp number"); return None; }
+                Err(_) => { error("Bad tcp source port number"); return None; }
             }
         }
+
         if self.dest_port.0.is_active() {
             packet.set_destination(0)
         } else {
             match self.dest_port.1.text().parse::<u16>() {
                 Ok(value) => packet.set_destination(value),
-                Err(_) => { error("Bad destination port tcp number"); return None; }
+                Err(_) => { error("Bad tcp destination port number"); return None; }
             }
         }
+
         if self.sequence_number.0.is_active() {
             packet.set_sequence(0)
         } else {
@@ -683,6 +744,7 @@ impl TCPWidgets {
                 Err(_) => { error("Bad tcp sequence number"); return None; }
             }
         }
+
         if self.acknowledgement.0.is_active() {
             packet.set_acknowledgement(0)
         } else {
@@ -691,6 +753,7 @@ impl TCPWidgets {
                 Err(_) => { error("Bad tcp acknowledgement number"); return None; }
             }
         }
+
         if self.offset.0.is_active() {
             packet.set_data_offset(0)
         } else {
@@ -700,12 +763,13 @@ impl TCPWidgets {
             }
         }
 
-        packet.set_flags(self.get_flags());
         let mut reserved = 0u8;
         if self.reserved_bits.0.is_active() { reserved |= 0b0000_0001; }
         if self.reserved_bits.1.is_active() { reserved |= 0b0000_0010; }
         if self.reserved_bits.2.is_active() { reserved |= 0b0000_0100; }
         packet.set_reserved(reserved);
+
+        packet.set_flags(self.get_flags());
 
         if self.window.0.is_active() {
             packet.set_window(0)
@@ -715,19 +779,22 @@ impl TCPWidgets {
                 Err(_) => { error("Bad tcp window size number"); return None; }
             }
         }
+
         if self.urgent.0.is_active() {
             packet.set_urgent_ptr(0)
         } else {
             match self.urgent.1.text().parse::<u16>() {
                 Ok(value) => packet.set_urgent_ptr(value),
-                Err(_) => { error("Bad source port tcp number"); return None; }
+                Err(_) => { error("Bad tcp urgent pointer number"); return None; }
             }
         }
 
-
         packet.set_payload(self.data.text().as_bytes());
 
-
+        match self.get_options() {
+            Some(options) => packet.set_options(&options),
+            None => { error("Bad tcp options value"); return None; }
+        }
 
         if self.checksum.0.is_active() {
             packet.set_checksum(pnet::packet::tcp::ipv4_checksum(
