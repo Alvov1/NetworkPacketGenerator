@@ -1,12 +1,14 @@
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use gtk::prelude::*;
-use pnet::packet::icmp::{IcmpCode, IcmpTypes, MutableIcmpPacket};
-use crate::error_window::error;
-use crate::main;
+use pnet::packet::Packet;
+use pnet::packet::icmp::IcmpTypes;
+use pnet::packet::icmp::IcmpCode;
+use pnet::packet::icmp::MutableIcmpPacket;
+
 use crate::udp::UdpOptions;
-use crate::widgets::MainWindow;
+use crate::error_window::error;
 
 pub(crate) struct IcmpOptions {
     type_dropdown: gtk::DropDown,
@@ -15,7 +17,7 @@ pub(crate) struct IcmpOptions {
     data_entry: gtk::Entry,
 }
 impl IcmpOptions {
-    pub(crate) fn show_window() {
+    pub(crate) fn show_window() -> Option<Vec<u8>> {
         let icmp_widgets = IcmpOptions::new();
         let udp_widgets = UdpOptions::new();
         let packet: Arc<Mutex<Option<MutableIcmpPacket>>> = Arc::new(Mutex::new(None));
@@ -45,6 +47,11 @@ impl IcmpOptions {
         });
 
         dialog.show();
+
+        return match &*packet.clone().lock().unwrap() {
+            Some(value) => Some(Vec::from(value.payload())),
+            None => None
+        }
     }
 
     fn generate_ui(&self, udp_options: &UdpOptions) -> gtk::Box {

@@ -7,6 +7,8 @@ mod widgets;
 mod error_window;
 mod icmp;
 mod udp;
+mod ip;
+mod tcp;
 
 fn main() {
     let application = gtk::Application::builder()

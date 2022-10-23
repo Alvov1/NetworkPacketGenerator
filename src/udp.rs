@@ -1,7 +1,8 @@
 use gtk::prelude::*;
+
 use pnet::packet::udp::MutableUdpPacket;
+
 use crate::error_window::error;
-use crate::icmp::IcmpOptions;
 
 pub(crate) struct UdpOptions {
     src_port: gtk::Entry,
