@@ -17,7 +17,7 @@ pub(crate) struct IcmpOptions {
     data_entry: gtk::Entry,
 }
 impl IcmpOptions {
-    pub(crate) fn show_window(pointer: Arc<Mutex<Option<Vec<u8>>>>) {
+    pub(crate) fn show_window() {
         let icmp_widgets = IcmpOptions::new();
         let udp_widgets = UdpOptions::new();
 
@@ -32,7 +32,7 @@ impl IcmpOptions {
             match response {
                 gtk::ResponseType::Ok => {
                     match icmp_widgets.build_packet() {
-                        Some(value) => *pointer.lock().unwrap() = Some(Vec::from(value.payload())),
+                        Some(value) => *pointer.lock().unwrap() = Some(Vec::from(value.packet())),
                         None => {}
                     }
                     dialog.close();
@@ -89,26 +89,38 @@ impl IcmpOptions {
             data_entry: gtk::Entry::builder().placeholder_text("Data..").build(),
         }
     }
-    fn build_packet(&self) -> Option<MutableIcmpPacket<'static>> {
+    fn build_packet(&self) -> Option<MutableIcmpPacket> {
         let mut packet = MutableIcmpPacket::owned(vec![0u8; MutableIcmpPacket::minimum_packet_size()]).unwrap();
 
         match self.type_dropdown.selected() {
-        0 => packet.set_icmp_type(IcmpTypes::EchoRequest),
-        1 => packet.set_icmp_type(IcmpTypes::EchoReply),
-        _ => { error("Unsupported ICMP message type"); return None; }
-    }
+            0 => packet.set_icmp_type(IcmpTypes::EchoRequest),
+            1 => packet.set_icmp_type(IcmpTypes::EchoReply),
+            _ => { error("Unsupported ICMP message type"); return None; }
+        }
 
-        match self.code_entry.text().parse::<u8>() {
-        Ok(value) => packet.set_icmp_code(IcmpCode::new(value)),
-        _ => { error("Bad ICMP code value"); return None; }
-    }
-
-        match self.checksum_entry.text().parse::<u16>() {
-        Ok(value) => packet.set_checksum(value),
-        _ => { error("Bad ICMP checksum value"); return None; }
-    }
+        if self.code_entry.text_length() > 0 {
+            match self.code_entry.text().parse::<u8>() {
+                Ok(value) => packet.set_icmp_code(IcmpCode::new(value)),
+                _ => {
+                    error("Bad ICMP code value");
+                    return None;
+                }
+            }
+        } else { packet.set_icmp_code(IcmpCode::new(8)); }
 
         packet.set_payload(self.data_entry.text().as_bytes());
+
+        if self.checksum_entry.text_length() > 0 {
+            match self.checksum_entry.text().parse::<u16>() {
+                Ok(value) => packet.set_checksum(value),
+                _ => {
+                    error("Bad ICMP checksum value");
+                    return None;
+                }
+            }
+        } else {
+            packet.set_checksum(pnet::packet::icmp::checksum(&packet.to_immutable()));
+        }
 
         Some(packet)
     }

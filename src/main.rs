@@ -1,4 +1,3 @@
-use std::sync::{Arc, Mutex};
 use gtk::prelude::*;
 use crate::widgets::MainWindow;
 
@@ -9,6 +8,7 @@ mod icmp;
 mod udp;
 mod ip;
 mod tcp;
+mod show_packet;
 
 fn main() {
     let application = gtk::Application::builder()

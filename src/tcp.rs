@@ -1,10 +1,9 @@
 use gtk::prelude::*;
 
 use std::net::Ipv4Addr;
+use pnet::packet::Packet;
 use pnet::packet::FromPacket;
-use pnet::packet::MutablePacket;
 use pnet::packet::tcp::TcpOption;
-use pnet::packet::tcp::TcpOptionNumber;
 use pnet::packet::tcp::TcpOptionNumbers;
 use pnet::packet::tcp::MutableTcpPacket;
 use pnet::packet::tcp::MutableTcpOptionPacket;
@@ -35,7 +34,7 @@ pub(crate) struct TCPWidgets {
 impl TCPWidgets {
     pub(crate) fn new() -> Self {
         Self {
-            source_port: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Port").build()),
+            source_port: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Port").text("8888").build()),
             dest_port: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Port").build()),
             sequence_number: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Sequence number").build()),
             acknowledgement: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Acknowledgement").build()),
@@ -281,13 +280,16 @@ impl TCPWidgets {
                     packet.set_number(TcpOptionNumbers::WSCALE);
                     options.push(packet.from_packet());
                 },
-                _ => { return None; }
+                _ => { }
             }
         }
         return Some(options);
     }
     pub(crate) fn build_packet(&self, addresses: (Ipv4Addr, Ipv4Addr)) -> Option<Vec<u8>> {
-        let mut packet = MutableTcpPacket::owned(vec![0u8; MutableTcpPacket::minimum_packet_size()]).unwrap();
+        let packet_size = MutableTcpPacket::minimum_packet_size() + self.data.text().len();
+
+        let mut packet = MutableTcpPacket::owned(vec![0u8; packet_size]).unwrap();
+        packet.set_payload(self.data.text().as_bytes());
 
         if self.source_port.0.is_active() {
             packet.set_source(0)
@@ -326,7 +328,7 @@ impl TCPWidgets {
         }
 
         if self.offset.0.is_active() {
-            packet.set_data_offset(0)
+            packet.set_data_offset(5 as u8)
         } else {
             match self.offset.1.text().parse::<u8>() {
                 Ok(value) => packet.set_data_offset(value),
@@ -360,8 +362,6 @@ impl TCPWidgets {
             }
         }
 
-        packet.set_payload(self.data.text().as_bytes());
-
         match self.get_options() {
             Some(options) => packet.set_options(&options),
             None => { error("Bad tcp options value"); return None; }
@@ -377,6 +377,13 @@ impl TCPWidgets {
             }
         }
 
-        return Some(Vec::from(packet.payload_mut()));
+        return Some(Vec::from(packet.packet()));
+    }
+    pub(crate) fn give_payload(&self) -> Option<Vec<u8>> {
+        if self.data.text().is_empty() {
+            return None;
+        }
+
+        return Some(self.data.text().bytes().collect())
     }
 }

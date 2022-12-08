@@ -1,24 +1,28 @@
-use std::net::Ipv4Addr;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::{Arc, LockResult};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use gtk::prelude::*;
 use pnet::datalink;
+use pnet::util::MacAddr;
+use pnet::packet::Packet;
 use pnet::datalink::Channel::Ethernet;
 use pnet::datalink::NetworkInterface;
-use pnet::util::MacAddr;
-use pnet::packet::MutablePacket;
-use pnet::packet::ethernet::{EtherType, MutableEthernetPacket};
+use pnet::packet::ethernet::EtherType;
+use pnet::packet::ethernet::MutableEthernetPacket;
 use pnet::packet::ip::IpNextHeaderProtocol;
 
-use crate::icmp;
-use crate::udp;
+use mac_address::get_mac_address;
+use mac_address::MacAddress;
+use mac_address::MacAddressError;
+
 use crate::ip::IPWidgets;
 use crate::tcp::TCPWidgets;
 use crate::udp::UdpOptions;
 use crate::icmp::IcmpOptions;
 use crate::error_window::error;
+use crate::show_packet::show;
 
 struct NetworkInterfaceWidget {
     list: gtk::DropDown,
@@ -40,18 +44,31 @@ struct MacAddressesWidgets {
     destination: gtk::Entry
 }
 impl MacAddressesWidgets {
-    fn new() -> MacAddressesWidgets {
-        Self {
-            source: gtk::Entry::builder().placeholder_text("Source MAC").text("FF.FF.FF.FF.FF.FF").build(),
-            destination: gtk::Entry::builder().placeholder_text("Destination MAC").text("FF.FF.FF.FF.FF.FF").build()
+    fn new(mac_address: Result<Option<MacAddress>, MacAddressError>) -> MacAddressesWidgets {
+        match mac_address {
+            Ok(Some(address)) => {
+                let mut address_string = String::new();
+                address_string += &format!("{:2x}", address.bytes()[0]);
+                for byte in &address.bytes()[1..] {
+                    address_string += &*(".".to_string() + &format!("{:2x}", byte));
+                }
+                Self {
+                    source: gtk::Entry::builder().placeholder_text("Source MAC").text(&address_string).build(),
+                    destination: gtk::Entry::builder().placeholder_text("Destination MAC").text(&address_string).build(),
+                }
+            },
+            _ => Self {
+                source: gtk::Entry::builder().placeholder_text("Source MAC").text("96:61:fc:c4:e6:f9").build(),
+                destination: gtk::Entry::builder().placeholder_text("Destination MAC").text("96:61:fc:c4:e6:f9").build()
+            }
         }
     }
     fn get(&self) -> Option<(MacAddr, MacAddr)> {
-        let source = match MacAddr::from_str(self.source.text().as_str()) {
+        let source = match MacAddr::from_str(self.source.text().replace('.', ":").as_str()) {
             Ok(address) => address,
-            Err(_) => { error("Bad source mac address value."); return None }
+            Err(what) => { error(&("Bad source mac address value: ".to_owned() + &what.to_string())); return None }
         };
-        let destination = match MacAddr::from_str(self.destination.text().as_str()) {
+        let destination = match MacAddr::from_str(self.destination.text().replace('.', ":").as_str()) {
             Ok(address) => address,
             Err(_) => { error("Bad destination mac address value."); return None }
         };
@@ -66,7 +83,7 @@ pub struct MainWindowWidgets {
     buttons: (gtk::CheckButton, gtk::CheckButton, gtk::CheckButton, gtk::CheckButton),
     macs: MacAddressesWidgets,
 
-    ip_widgets: IPWidgets,
+    pub(crate) ip_widgets: IPWidgets,
     tcp_widgets: TCPWidgets
 }
 impl MainWindowWidgets {
@@ -157,81 +174,87 @@ impl MainWindowWidgets {
     fn new() -> Self {
         let binding = datalink::interfaces();
         let names: Vec<_> = binding.iter().map(|v| &*v.name).collect();
+        let source_mac = get_mac_address();
+
         Self {
             interface_list: NetworkInterfaceWidget::new(&names),
 
             buttons: ( gtk::CheckButton::builder().label("IP").active(true).build(), gtk::CheckButton::with_label("TCP"),
                        gtk::CheckButton::with_label("UDP"), gtk::CheckButton::with_label("ICMP") ),
 
-            macs: MacAddressesWidgets::new(),
+            macs: MacAddressesWidgets::new(source_mac),
             ip_widgets: IPWidgets::new(),
             tcp_widgets: TCPWidgets::new()
         }
     }
-    fn build_packet(widgets: Arc<Mutex<MainWindowWidgets>>) {
-        if widgets.lock().unwrap().buttons.3.is_active() {
+    fn build_packet(widgets: Rc<RefCell<MainWindowWidgets>>) {
+        if widgets.borrow().buttons.3.is_active() {
             Self::build_icmp_packet(widgets.clone());
         }
-        if widgets.lock().unwrap().buttons.2.is_active() {
+        if widgets.borrow().buttons.2.is_active() {
             Self::build_udp_packet(widgets.clone());
         }
-        if widgets.lock().unwrap().buttons.1.is_active() {
+        if widgets.borrow().buttons.1.is_active() {
             Self::build_tcp_packet(widgets.clone());
         }
-        if widgets.lock().unwrap().buttons.0.is_active() {
-            Self::build_ip_packet(widgets, Vec::new());
+        if widgets.borrow().buttons.0.is_active() {
+            match widgets.clone().borrow().tcp_widgets.give_payload() {
+                Some(value) => Self::build_ip_packet(widgets, value, IpNextHeaderProtocol::new(0)),
+                None => Self::build_ip_packet(widgets, Vec::new(), IpNextHeaderProtocol::new(0))
+            }
         }
     }
-    fn build_icmp_packet(widgets: Arc<Mutex<MainWindowWidgets>>) {
-
+    fn build_icmp_packet(widgets: Rc<RefCell<MainWindowWidgets>>) {
+        let pointer = Arc::new(Mutex::new(None));
+        IcmpOptions::show_window(pointer.clone());
     }
-    fn build_udp_packet(widgets: Arc<Mutex<MainWindowWidgets>>) {
-
-
-    }
-    fn build_tcp_packet(widgets: Arc<Mutex<MainWindowWidgets>>) {
-        let addresses = match widgets.lock().unwrap().ip_widgets.get_addresses() {
+    fn build_udp_packet(widgets: Rc<RefCell<MainWindowWidgets>>) {
+        let addresses = match widgets.clone().borrow().ip_widgets.get_addresses() {
             Some(addresses) => addresses,
             None => { error("Bad src or destination IP address value."); return }
         };
 
-        let packet = match widgets.lock().unwrap().tcp_widgets.build_packet(addresses) {
+        UdpOptions::show_window(widgets.clone(), addresses);
+    }
+    fn build_tcp_packet(widgets: Rc<RefCell<MainWindowWidgets>>) {
+        let addresses = match widgets.borrow().ip_widgets.get_addresses() {
+            Some(addresses) => addresses,
+            None => { error("Bad src or destination IP address value."); return }
+        };
+
+        let packet = match widgets.borrow().tcp_widgets.build_packet(addresses) {
             Some(packet) => packet,
             None => { return }
         };
-
-        Self::build_ip_packet(widgets, packet);
+        show("TCP packet", &packet);
+        Self::build_ip_packet(widgets, packet, IpNextHeaderProtocol::new(6));
     }
-    fn build_ip_packet(widgets: Arc<Mutex<MainWindowWidgets>>, data: Vec<u8>) {
-        let packet = match widgets.lock().unwrap().ip_widgets.build_packet(IpNextHeaderProtocol::new(0), &data) {
+    fn build_ip_packet(widgets: Rc<RefCell<MainWindowWidgets>>, data: Vec<u8>, next_protocol: IpNextHeaderProtocol) {
+        let packet = match widgets.borrow().ip_widgets.build_packet(next_protocol, &data) {
             Some(packet) => packet,
-            None => {}
+            None => { return }
         };
-        packet
         Self::build_frame(widgets.clone(), &packet);
     }
-    fn build_frame(widgets: Arc<Mutex<MainWindowWidgets>>, data: &Vec<u8>) {
-        let mut frame = MutableEthernetPacket::owned(vec![0u8; MutableEthernetPacket::minimum_packet_size()]).unwrap();
+    pub(crate) fn build_frame(widgets: Rc<RefCell<MainWindowWidgets>>, data: &Vec<u8>) {
+        let mut frame = MutableEthernetPacket::owned(vec![0u8; MutableEthernetPacket::minimum_packet_size() + data.len()]).unwrap();
 
-        match widgets.lock() {
-            Ok(widgets) => {
-                match widgets.macs.get() {
-                    Some(addresses) => { frame.set_source(addresses.0); frame.set_destination(addresses.1); },
-                    None => return
-                }
-            }
-            Err(_) => { return }
-        };
+        match widgets.borrow().macs.get() {
+            Some(addresses) => { frame.set_source(addresses.0); frame.set_destination(addresses.1); },
+            None => return
+        }
 
         frame.set_ethertype(EtherType::new(0x0800));
         frame.set_payload(data);
 
-        let interface = widgets.lock().unwrap().interface_list.get_active();
+        let interface = widgets.borrow().interface_list.get_active();
 
-        Self::send_frame(frame.payload_mut(), &interface);
+        let payload = Vec::from(frame.packet());
+        show("Ethernet frame", &payload);
+        Self::send_frame(&payload, &interface);
     }
 
-    fn send_frame(payload: &[u8], iface: &str) {
+    fn send_frame(payload: &Vec<u8>, iface: &str) {
         let interfaces = datalink::interfaces();
         let interface = interfaces.into_iter()
             .filter(|interface: &NetworkInterface| {
@@ -246,27 +269,27 @@ impl MainWindowWidgets {
             Err(e) => panic!("Failed to create datalink channel."),
         };
 
-        match tx.send_to(payload, Some(interface)) {
-            Some(_) => {},
-            None => error("Failed to send packet.")
+        match tx.send_to(&payload, None) {
+            Some(info) => {},
+            None => { error("Failed to send packet."); return }
         }
     }
 }
 
 pub struct MainWindow {
-    widgets: Arc<Mutex<MainWindowWidgets>>,
+    widgets: Rc<RefCell<MainWindowWidgets>>,
     window: gtk::ApplicationWindow
 }
 impl MainWindow {
     pub(crate) fn new(app: &gtk::Application) -> Self {
-        let widgets = Arc::new(Mutex::new(MainWindowWidgets::new()));
+        let widgets = Rc::new(RefCell::new(MainWindowWidgets::new()));
 
         let button = gtk::Button::with_label("Collect");
-        let ui = widgets.lock().unwrap().generate_ui(&button);
+        let ui = widgets.borrow().generate_ui(&button);
 
         let clone = widgets.clone();
         button.connect_clicked(move |_| {
-            println!("{:?}", MainWindowWidgets::build_packet(clone.clone()));
+            MainWindowWidgets::build_packet(clone.clone());
         });
 
         let window = gtk::ApplicationWindow::builder()

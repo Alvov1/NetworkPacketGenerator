@@ -1,8 +1,8 @@
 use gtk::prelude::*;
 
 use std::net::Ipv4Addr;
+use pnet::packet::Packet;
 use pnet::packet::FromPacket;
-use pnet::packet::MutablePacket;
 use pnet::packet::ipv4::Ipv4Option;
 use pnet::packet::ipv4::Ipv4OptionNumber;
 use pnet::packet::ipv4::Ipv4OptionNumbers;
@@ -13,6 +13,7 @@ use pnet::packet::ipv4::MutableIpv4Packet;
 use std::str::FromStr;
 
 use crate::error_window::error;
+use crate::show_packet::show;
 
 pub(crate) struct IPWidgets {
     src_ip: gtk::Entry,
@@ -34,8 +35,8 @@ pub(crate) struct IPWidgets {
 impl IPWidgets {
     pub(crate) fn new() -> Self {
         Self {
-            src_ip: gtk::Entry::builder().placeholder_text("Source IPv4").text("127.0.0.1").build(),
-            dest_ip: gtk::Entry::builder().placeholder_text("Destination IPv4").text("127.0.0.1").build(),
+            src_ip: gtk::Entry::builder().placeholder_text("Source IPv4").text("192.168.31.160").build(),
+            dest_ip: gtk::Entry::builder().placeholder_text("Destination IPv4").text("192.168.31.150").build(),
 
             version: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Version").build()),
             header_length: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Header length").build()),
@@ -342,9 +343,34 @@ impl IPWidgets {
         return self.build_packet(next_protocol, &Vec::new());
     }
     pub(crate) fn build_packet(&self, next_protocol: IpNextHeaderProtocol, data: &[u8]) -> Option<Vec<u8>> {
-        let mut packet = MutableIpv4Packet::owned(vec![0u8; MutableIpv4Packet::minimum_packet_size()]).unwrap();
+        let options = match self.get_options() {
+            Some(options) => options,
+            None => Vec::new()
+        };
 
-        let addresses = self.get_addresses();
+        let header_length = match self.header_length.0.is_active() {
+            true => { 5 },
+            false => {
+                match self.header_length.1.text().parse::<u8>() {
+                    Ok(value) => value,
+                    Err(_) => { error("Bad IP header length value"); return None; }
+                }
+            }
+        };
+        let auto_total_len = ((header_length as usize * 4) + data.len() + options.len()) as u16;
+
+        let mut packet = MutableIpv4Packet::owned(vec![0u8; auto_total_len as usize]).unwrap();
+        packet.set_options(&options);
+
+        packet.set_header_length(header_length);
+
+        match self.get_addresses() {
+            Some(addresses) => {
+                packet.set_source(addresses.0);
+                packet.set_destination(addresses.1);
+            },
+            None => return None
+        }
 
         if self.version.0.is_active() {
             packet.set_version(4);
@@ -355,17 +381,9 @@ impl IPWidgets {
             }
         }
 
-        if self.header_length.0.is_active() {
-            packet.set_header_length(5);
-        } else {
-            match self.header_length.1.text().parse::<u8>() {
-                Ok(value) => packet.set_header_length(value),
-                Err(_) => { error("Bad IP header length value"); return None; }
-            }
-        }
 
         if self.dscp.0.is_active() {
-            packet.set_dscp(4);
+            packet.set_dscp(0);
         } else {
             match self.dscp.1.text().parse::<u8>() {
                 Ok(value) => packet.set_dscp(value),
@@ -374,7 +392,7 @@ impl IPWidgets {
         }
 
         if self.ecn.0.is_active() {
-            packet.set_ecn(4);
+            packet.set_ecn(0);
         } else {
             match self.ecn.1.text().parse::<u8>() {
                 Ok(value) => packet.set_ecn(value),
@@ -383,7 +401,7 @@ impl IPWidgets {
         }
 
         if self.packet_length.0.is_active() {
-            packet.set_total_length(4);
+            packet.set_total_length(auto_total_len);
         } else {
             match self.packet_length.1.text().parse::<u16>() {
                 Ok(value) => packet.set_total_length(value),
@@ -392,7 +410,7 @@ impl IPWidgets {
         }
 
         if self.packet_id.0.is_active() {
-            packet.set_identification(4);
+            packet.set_identification(12345);
         } else {
             match self.packet_id.1.text().parse::<u16>() {
                 Ok(value) => packet.set_identification(value),
@@ -407,7 +425,7 @@ impl IPWidgets {
         packet.set_flags(flags);
 
         if self.offset.0.is_active() {
-            packet.set_fragment_offset(4);
+            packet.set_fragment_offset(0);
         } else {
             match self.offset.1.text().parse::<u16>() {
                 Ok(value) => packet.set_fragment_offset(value),
@@ -425,12 +443,6 @@ impl IPWidgets {
         }
 
         packet.set_next_level_protocol(next_protocol);
-
-        match self.get_options() {
-            Some(options) => packet.set_options(&options),
-            None => {}
-        };
-
         packet.set_payload(data);
 
         if self.checksum.0.is_active() {
@@ -442,6 +454,8 @@ impl IPWidgets {
             }
         }
 
-        Some(Vec::from(packet.payload_mut()))
+        let payload = Vec::from(packet.packet());
+        show("IPv4 packet", &payload);
+        Some(payload)
     }
 }

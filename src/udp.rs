@@ -1,10 +1,14 @@
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::cell::RefCell;
+use std::net::Ipv4Addr;
+use std::rc::Rc;
 use gtk::prelude::*;
+use pnet::packet::ip::IpNextHeaderProtocol;
 use pnet::packet::Packet;
 use pnet::packet::udp::MutableUdpPacket;
 
 use crate::error_window::error;
+use crate::show_packet::show;
+use crate::widgets::MainWindowWidgets;
 
 pub(crate) struct UdpOptions {
     src_port: gtk::Entry,
@@ -14,23 +18,32 @@ pub(crate) struct UdpOptions {
     data: gtk::Entry
 }
 impl UdpOptions {
-    pub(crate) fn show_window(pointer: Arc<Mutex<Option<Vec<u8>>>>) {
-        let widgets = UdpOptions::new();
-
+    pub(crate) fn show_window(widgets: Rc<RefCell<MainWindowWidgets>>, addresses: (Ipv4Addr, Ipv4Addr)) {
+        let udp_widgets = UdpOptions::new();
         let dialog = gtk::Dialog::with_buttons(
             Some("UDP options"),
             Some(&gtk::Window::new()),
             gtk::DialogFlags::USE_HEADER_BAR,
             &[("Ok", gtk::ResponseType::Ok), ("Cancel", gtk::ResponseType::Cancel)]);
-        dialog.content_area().append(&Self::generate_ui(&widgets));
+        dialog.content_area().append(&Self::generate_ui(&udp_widgets));
 
         dialog.connect_response(move |dialog, response| {
             match response {
                 gtk::ResponseType::Ok => {
-                    match widgets.build_packet() {
-                        Some(value) => *pointer.lock().unwrap() = Some(Vec::from(value.payload())),
-                        None => {}
-                    }
+                    let udp_packet = match udp_widgets.build_packet(addresses) {
+                        Some(value) => value,
+                        None => { dialog.close(); return }
+                    };
+
+                    show("UDP packet", &udp_packet);
+
+                    let ip_packet = match widgets.borrow().ip_widgets.build_packet(IpNextHeaderProtocol::new(17), &udp_packet) {
+                        Some(packet) => packet,
+                        None => { dialog.close(); return }
+                    };
+
+                    MainWindowWidgets::build_frame(widgets.clone(), &ip_packet);
+
                     dialog.close();
                 },
                 gtk::ResponseType::Cancel => {
@@ -74,34 +87,71 @@ impl UdpOptions {
     
     pub(crate) fn new() -> UdpOptions {
         UdpOptions {
-            src_port: gtk::Entry::builder().placeholder_text("Port..").build(),
-            dest_port: gtk::Entry::builder().placeholder_text("Port..").build(),
+            src_port: gtk::Entry::builder().placeholder_text("Port..").text("1234").build(),
+            dest_port: gtk::Entry::builder().placeholder_text("Port..").text("1234").build(),
             length: gtk::Entry::builder().placeholder_text("Length..").build(),
             checksum: gtk::Entry::builder().placeholder_text("Checksum..").build(),
             data: gtk::Entry::builder().placeholder_text("Data..").build()
         }
     }
-    fn build_packet(&self) -> Option<MutableUdpPacket> {
-        let mut packet = MutableUdpPacket::owned(vec![0u8; MutableUdpPacket::minimum_packet_size()]).unwrap();
-
-        match self.src_port.text().parse::<u16>() {
-            Ok(port) => packet.set_source(port),
-            Err(_) => { error("Bad udp source port value."); return None; }
-        }
-        match self.dest_port.text().parse::<u16>() {
-            Ok(port) => packet.set_destination(port),
-            Err(_) => { error("Bad udp destination port value."); return None; }
-        }
-        match self.length.text().parse::<u16>() {
-            Ok(length) => packet.set_length(length),
-            Err(_) => { error("Bad udp length value."); return None; }
-        }
-        match self.checksum.text().parse::<u16>() {
-            Ok(checksum) => packet.set_checksum(checksum),
-            Err(_) => { error("Bad udp checksum value."); return None; }
-        }
+    fn build_packet(&self, addresses: (Ipv4Addr, Ipv4Addr)) -> Option<Vec<u8>> {
+        let packet_size = MutableUdpPacket::minimum_packet_size() + self.data.text().bytes().len();
+        let mut packet = MutableUdpPacket::owned(vec![0u8; packet_size]).unwrap();
         packet.set_payload(self.data.text().as_bytes());
 
-        return Some(packet);
+        if self.src_port.text_length() > 0 {
+            match self.src_port.text().parse::<u16>() {
+                Ok(port) => packet.set_source(port),
+                Err(_) => {
+                    error("Bad udp source port value.");
+                    return None;
+                }
+            }
+        } else { error("Please specify a source UDP port."); return None; }
+
+        if self.dest_port.text_length() > 0 {
+            match self.dest_port.text().parse::<u16>() {
+                Ok(port) => packet.set_destination(port),
+                Err(_) => {
+                    error("Bad udp destination port value.");
+                    return None;
+                }
+            }
+        } else { error("Please specify a destination UDP port."); return None; }
+
+        if self.length.text_length() > 0 {
+            match self.length.text().parse::<u16>() {
+                Ok(length) => packet.set_length(length),
+                Err(_) => {
+                    error("Bad udp length value.");
+                    return None;
+                }
+            }
+        } else {
+            packet.set_length(
+                (MutableUdpPacket::minimum_packet_size()
+                    + self.data.text().as_bytes().len()) as u16);
+        }
+
+
+        if self.checksum.text_length() > 0 {
+            match self.checksum.text().parse::<u16>() {
+                Ok(checksum) => packet.set_checksum(checksum),
+                Err(_) => {
+                    error("Bad udp checksum value.");
+                    return None;
+                }
+            }
+        } else {
+            packet.set_checksum(
+                pnet::packet::udp::ipv4_checksum(
+                    &packet.to_immutable(),
+                    &addresses.0,
+                    &addresses.1
+                )
+            );
+        }
+
+        return Some(Vec::from(packet.packet()));
     }
 }
