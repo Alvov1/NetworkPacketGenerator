@@ -205,8 +205,12 @@ impl MainWindowWidgets {
         }
     }
     fn build_icmp_packet(widgets: Rc<RefCell<MainWindowWidgets>>) {
-        let pointer = Arc::new(Mutex::new(None));
-        IcmpOptions::show_window(pointer.clone());
+        let addresses = match widgets.clone().borrow().ip_widgets.get_addresses() {
+            Some(addresses) => addresses,
+            None => { error("Bad src or destination IP address value."); return }
+        };
+
+        IcmpOptions::show_window(widgets.clone(), addresses);
     }
     fn build_udp_packet(widgets: Rc<RefCell<MainWindowWidgets>>) {
         let addresses = match widgets.clone().borrow().ip_widgets.get_addresses() {

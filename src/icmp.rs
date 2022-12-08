@@ -1,14 +1,17 @@
-use std::sync::Arc;
-use std::sync::Mutex;
-
+use std::cell::RefCell;
+use std::net::Ipv4Addr;
+use std::rc::Rc;
 use gtk::prelude::*;
 use pnet::packet::Packet;
 use pnet::packet::icmp::IcmpTypes;
 use pnet::packet::icmp::IcmpCode;
 use pnet::packet::icmp::MutableIcmpPacket;
+use pnet::packet::ip::IpNextHeaderProtocol;
 
 use crate::udp::UdpOptions;
 use crate::error_window::error;
+use crate::show_packet::show;
+use crate::widgets::MainWindowWidgets;
 
 pub(crate) struct IcmpOptions {
     type_dropdown: gtk::DropDown,
@@ -17,24 +20,31 @@ pub(crate) struct IcmpOptions {
     data_entry: gtk::Entry,
 }
 impl IcmpOptions {
-    pub(crate) fn show_window() {
+    pub(crate) fn show_window(widgets: Rc<RefCell<MainWindowWidgets>>, addresses: (Ipv4Addr, Ipv4Addr)) {
         let icmp_widgets = IcmpOptions::new();
-        let udp_widgets = UdpOptions::new();
-
         let dialog = gtk::Dialog::with_buttons(
             Some("ICMP options"),
             Some(&gtk::Window::new()),
             gtk::DialogFlags::USE_HEADER_BAR,
             &[("Ok", gtk::ResponseType::Ok), ("Cancel", gtk::ResponseType::Cancel)]);
-        dialog.content_area().append(&icmp_widgets.generate_ui(&udp_widgets));
+        dialog.content_area().append(&icmp_widgets.generate_ui());
 
         dialog.connect_response(move |dialog, response| {
             match response {
                 gtk::ResponseType::Ok => {
-                    match icmp_widgets.build_packet() {
-                        Some(value) => *pointer.lock().unwrap() = Some(Vec::from(value.packet())),
-                        None => {}
-                    }
+                    let icmp_packet = match icmp_widgets.build_packet() {
+                        Some(value) => value,
+                        None => { dialog.close(); return; }
+                    };
+
+                    show("ICMP packet", &icmp_packet);
+
+                    let ip_packet = match widgets.borrow().ip_widgets.build_packet(IpNextHeaderProtocol::new(1), &icmp_packet) {
+                        Some(value) => value,
+                        None => { dialog.close(); return; }
+                    };
+
+                    MainWindowWidgets::build_frame(widgets.clone(), &ip_packet);
                     dialog.close();
                 },
                 gtk::ResponseType::Cancel => {
@@ -47,18 +57,12 @@ impl IcmpOptions {
         dialog.show();
     }
 
-    fn generate_ui(&self, udp_options: &UdpOptions) -> gtk::Box {
-        let udp_grid = udp_options.prepare_ui_fields();
+    fn generate_ui(&self) -> gtk::Box {
         let icmp_grid = self.prepare_ui_fields();
 
         let main_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical)
             .halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
-        let icmp_frame = gtk::Frame::builder().label("ICMP options").child(&icmp_grid)
-            .margin_start(24).margin_end(24).margin_top(24).build();
-        let udp_frame = gtk::Frame::builder().label("UDP options").child(&udp_grid)
-            .margin_start(24).margin_end(24).margin_bottom(24).build();
-        main_box.append(&icmp_frame);
-        main_box.append(&udp_frame);
+        main_box.append(&icmp_grid);
 
         main_box
     }
@@ -89,8 +93,19 @@ impl IcmpOptions {
             data_entry: gtk::Entry::builder().placeholder_text("Data..").build(),
         }
     }
-    fn build_packet(&self) -> Option<MutableIcmpPacket> {
-        let mut packet = MutableIcmpPacket::owned(vec![0u8; MutableIcmpPacket::minimum_packet_size()]).unwrap();
+    fn build_packet(&self) -> Option<Vec<u8>> {
+        let packet_size = match self.data_entry.text().is_empty() {
+            true => MutableIcmpPacket::minimum_packet_size() + "ICMP request".to_string().bytes().len(),
+            false => MutableIcmpPacket::minimum_packet_size() + self.data_entry.text().bytes().len()
+        };
+        let mut packet = MutableIcmpPacket::owned(vec![0u8; packet_size]).unwrap();
+
+        let payload: Vec<_> = match self.data_entry.text().is_empty() {
+            true => "ICMP request".to_string().bytes().collect(),
+            false => self.data_entry.text().bytes().collect()
+        };
+
+        packet.set_payload(&payload);
 
         match self.type_dropdown.selected() {
             0 => packet.set_icmp_type(IcmpTypes::EchoRequest),
@@ -108,7 +123,7 @@ impl IcmpOptions {
             }
         } else { packet.set_icmp_code(IcmpCode::new(8)); }
 
-        packet.set_payload(self.data_entry.text().as_bytes());
+
 
         if self.checksum_entry.text_length() > 0 {
             match self.checksum_entry.text().parse::<u16>() {
@@ -122,6 +137,6 @@ impl IcmpOptions {
             packet.set_checksum(pnet::packet::icmp::checksum(&packet.to_immutable()));
         }
 
-        Some(packet)
+        Some(Vec::from(packet.packet()))
     }
 }

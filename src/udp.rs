@@ -94,7 +94,7 @@ impl UdpOptions {
             data: gtk::Entry::builder().placeholder_text("Data..").build()
         }
     }
-    fn build_packet(&self, addresses: (Ipv4Addr, Ipv4Addr)) -> Option<Vec<u8>> {
+    pub(crate) fn build_packet(&self, addresses: (Ipv4Addr, Ipv4Addr)) -> Option<Vec<u8>> {
         let packet_size = MutableUdpPacket::minimum_packet_size() + self.data.text().bytes().len();
         let mut packet = MutableUdpPacket::owned(vec![0u8; packet_size]).unwrap();
         packet.set_payload(self.data.text().as_bytes());
