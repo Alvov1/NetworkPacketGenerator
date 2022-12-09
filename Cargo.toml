@@ -3,14 +3,8 @@ name = "NetworkPacketGenerator"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 gtk = { version = "0.4.8", package = "gtk4" }
-#gtk = "0.15.5"
-glib = "0.15.12"
-packet-builder = "0.6.0"
 pnet = "0.30.0"
-queues = "1.1.0"
 mac_address = "1.1.4"
 rand = "0.8.5"
