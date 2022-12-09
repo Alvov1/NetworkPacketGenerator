@@ -7,6 +7,7 @@ use pnet::packet::icmp::IcmpTypes;
 use pnet::packet::icmp::IcmpCode;
 use pnet::packet::icmp::MutableIcmpPacket;
 use pnet::packet::ip::IpNextHeaderProtocol;
+use crate::database::Database;
 
 use crate::udp::UdpOptions;
 use crate::error_window::error;
@@ -20,7 +21,7 @@ pub(crate) struct IcmpOptions {
     data_entry: gtk::Entry,
 }
 impl IcmpOptions {
-    pub(crate) fn show_window(widgets: Rc<RefCell<MainWindowWidgets>>, addresses: (Ipv4Addr, Ipv4Addr)) {
+    pub(crate) fn show_window(widgets: Rc<RefCell<MainWindowWidgets>>, database: Rc<RefCell<Database>>) {
         let icmp_widgets = IcmpOptions::new();
         let dialog = gtk::Dialog::with_buttons(
             Some("ICMP options"),
@@ -44,7 +45,7 @@ impl IcmpOptions {
                         None => { dialog.close(); return; }
                     };
 
-                    MainWindowWidgets::build_frame(widgets.clone(), &ip_packet);
+                    MainWindowWidgets::build_frame(widgets.clone(), &ip_packet, database.clone(), "ICMP");
                     dialog.close();
                 },
                 gtk::ResponseType::Cancel => {

@@ -1,3 +1,5 @@
+extern crate core;
+
 use gtk::prelude::*;
 use crate::widgets::MainWindow;
 

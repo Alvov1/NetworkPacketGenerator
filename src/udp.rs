@@ -5,6 +5,7 @@ use gtk::prelude::*;
 use pnet::packet::ip::IpNextHeaderProtocol;
 use pnet::packet::Packet;
 use pnet::packet::udp::MutableUdpPacket;
+use crate::database::Database;
 
 use crate::error_window::error;
 use crate::show_packet::show;
@@ -18,7 +19,7 @@ pub(crate) struct UdpOptions {
     data: gtk::Entry
 }
 impl UdpOptions {
-    pub(crate) fn show_window(widgets: Rc<RefCell<MainWindowWidgets>>, addresses: (Ipv4Addr, Ipv4Addr)) {
+    pub(crate) fn show_window(widgets: Rc<RefCell<MainWindowWidgets>>, addresses: (Ipv4Addr, Ipv4Addr), database: Rc<RefCell<Database>>) {
         let udp_widgets = UdpOptions::new();
         let dialog = gtk::Dialog::with_buttons(
             Some("UDP options"),
@@ -42,7 +43,7 @@ impl UdpOptions {
                         None => { dialog.close(); return }
                     };
 
-                    MainWindowWidgets::build_frame(widgets.clone(), &ip_packet);
+                    MainWindowWidgets::build_frame(widgets.clone(), &ip_packet, database.clone(), "UDP");
 
                     dialog.close();
                 },

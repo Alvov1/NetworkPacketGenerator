@@ -1,3 +1,4 @@
+
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -23,6 +24,7 @@ use crate::udp::UdpOptions;
 use crate::icmp::IcmpOptions;
 use crate::error_window::error;
 use crate::show_packet::show;
+use crate::database::Database;
 
 struct NetworkInterfaceWidget {
     list: gtk::DropDown,
@@ -36,7 +38,7 @@ impl NetworkInterfaceWidget {
         Self { list, interfaces }
     }
     fn set_active(&self, value: u32) { self.list.set_selected(value); }
-    fn get_active(&self) -> String { self.interfaces[self.list.selected() as usize].clone() }
+    pub(crate) fn get_active(&self) -> String { self.interfaces[self.list.selected() as usize].clone() }
 }
 
 struct MacAddressesWidgets {
@@ -87,7 +89,7 @@ pub struct MainWindowWidgets {
     tcp_widgets: TCPWidgets
 }
 impl MainWindowWidgets {
-    fn generate_ui(&self, button: &gtk::Button) -> gtk::Box {
+    fn generate_ui(&self, button: &gtk::Button, database: &gtk::Box) -> gtk::Box {
         let container = gtk::Box::builder().orientation(gtk::Orientation::Vertical).margin_top(24).margin_bottom(24)
             .margin_start(24).margin_end(24).halign(gtk::Align::Center).valign(gtk::Align::Center).spacing(24).build();
 
@@ -111,7 +113,7 @@ impl MainWindowWidgets {
         container.append(&self.get_mac_address_table());
 
         /* Third section. */
-        container.append(&self.get_utility_buttons());
+        container.append(database);
 
         /* Forth section. */
         container.append(&self.ip_widgets.prepare_options_section());
@@ -151,24 +153,9 @@ impl MainWindowWidgets {
 
         grid
     }
-    fn get_utility_buttons(&self) -> gtk::Box {
-        let main_box = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).halign(gtk::Align::Center)
-            .margin_start(24).margin_end(24).valign(gtk::Align::Center).spacing(24).build();
 
-        let save = gtk::Button::with_label("Save Packet");
-        main_box.append(&save); save.connect_clicked(move |_| { println!("Packet saved.") });
-        let sequence = gtk::Button::with_label("Send Sequence");
-        main_box.append(&sequence); sequence.connect_clicked(move |_| { println!("Sequence sent.") });
-        let open_file = gtk::Button::with_label("Open File...");
-        main_box.append(&open_file); open_file.connect_clicked(move |_| { println!("File opened.") });
-        let delete_packet = gtk::Button::with_label("Delete Packet");
-        main_box.append(&delete_packet); delete_packet.connect_clicked(move |_| { println!("Packet deleted.") });
-        let delete_file = gtk::Button::with_label("Delete File");
-        main_box.append(&delete_file); delete_file.connect_clicked(move |_| { println!("File deleted.") });
-        let create_file = gtk::Button::with_label("Create File");
-        main_box.append(&create_file); create_file.connect_clicked(move |_| { println!("File created.") });
-
-        main_box
+    pub(crate) fn get_active_interface(&self) -> String {
+        self.interface_list.get_active()
     }
 
     fn new() -> Self {
@@ -187,40 +174,40 @@ impl MainWindowWidgets {
             tcp_widgets: TCPWidgets::new()
         }
     }
-    fn build_packet(widgets: Rc<RefCell<MainWindowWidgets>>) {
+    fn build_packet(widgets: Rc<RefCell<MainWindowWidgets>>, database: Rc<RefCell<Database>>) {
         if widgets.borrow().buttons.3.is_active() {
-            Self::build_icmp_packet(widgets.clone());
+            Self::build_icmp_packet(widgets.clone(), database.clone());
         }
         if widgets.borrow().buttons.2.is_active() {
-            Self::build_udp_packet(widgets.clone());
+            Self::build_udp_packet(widgets.clone(), database.clone());
         }
         if widgets.borrow().buttons.1.is_active() {
-            Self::build_tcp_packet(widgets.clone());
+            Self::build_tcp_packet(widgets.clone(), database.clone());
         }
         if widgets.borrow().buttons.0.is_active() {
             match widgets.clone().borrow().tcp_widgets.give_payload() {
-                Some(value) => Self::build_ip_packet(widgets, value, IpNextHeaderProtocol::new(0)),
-                None => Self::build_ip_packet(widgets, Vec::new(), IpNextHeaderProtocol::new(0))
+                Some(value) => Self::build_ip_packet(widgets, value, IpNextHeaderProtocol::new(0), database, "IP"),
+                None => Self::build_ip_packet(widgets, Vec::new(), IpNextHeaderProtocol::new(0), database, "IP")
             }
         }
     }
-    fn build_icmp_packet(widgets: Rc<RefCell<MainWindowWidgets>>) {
+    fn build_icmp_packet(widgets: Rc<RefCell<MainWindowWidgets>>, database: Rc<RefCell<Database>>) {
         let addresses = match widgets.clone().borrow().ip_widgets.get_addresses() {
             Some(addresses) => addresses,
             None => { error("Bad src or destination IP address value."); return }
         };
 
-        IcmpOptions::show_window(widgets.clone(), addresses);
+        IcmpOptions::show_window(widgets.clone(), database);
     }
-    fn build_udp_packet(widgets: Rc<RefCell<MainWindowWidgets>>) {
+    fn build_udp_packet(widgets: Rc<RefCell<MainWindowWidgets>>, database: Rc<RefCell<Database>>) {
         let addresses = match widgets.clone().borrow().ip_widgets.get_addresses() {
             Some(addresses) => addresses,
             None => { error("Bad src or destination IP address value."); return }
         };
 
-        UdpOptions::show_window(widgets.clone(), addresses);
+        UdpOptions::show_window(widgets.clone(), addresses, database);
     }
-    fn build_tcp_packet(widgets: Rc<RefCell<MainWindowWidgets>>) {
+    fn build_tcp_packet(widgets: Rc<RefCell<MainWindowWidgets>>, database: Rc<RefCell<Database>>) {
         let addresses = match widgets.borrow().ip_widgets.get_addresses() {
             Some(addresses) => addresses,
             None => { error("Bad src or destination IP address value."); return }
@@ -231,16 +218,16 @@ impl MainWindowWidgets {
             None => { return }
         };
         show("TCP packet", &packet);
-        Self::build_ip_packet(widgets, packet, IpNextHeaderProtocol::new(6));
+        Self::build_ip_packet(widgets, packet, IpNextHeaderProtocol::new(6), database, "TCP");
     }
-    fn build_ip_packet(widgets: Rc<RefCell<MainWindowWidgets>>, data: Vec<u8>, next_protocol: IpNextHeaderProtocol) {
+    fn build_ip_packet(widgets: Rc<RefCell<MainWindowWidgets>>, data: Vec<u8>, next_protocol: IpNextHeaderProtocol, database: Rc<RefCell<Database>>, label: &str) {
         let packet = match widgets.borrow().ip_widgets.build_packet(next_protocol, &data) {
             Some(packet) => packet,
             None => { return }
         };
-        Self::build_frame(widgets.clone(), &packet);
+        Self::build_frame(widgets.clone(), &packet, database, label);
     }
-    pub(crate) fn build_frame(widgets: Rc<RefCell<MainWindowWidgets>>, data: &Vec<u8>) {
+    pub(crate) fn build_frame(widgets: Rc<RefCell<MainWindowWidgets>>, data: &Vec<u8>, database: Rc<RefCell<Database>>, label: &str) {
         let mut frame = MutableEthernetPacket::owned(vec![0u8; MutableEthernetPacket::minimum_packet_size() + data.len()]).unwrap();
 
         match widgets.borrow().macs.get() {
@@ -255,6 +242,7 @@ impl MainWindowWidgets {
 
         let payload = Vec::from(frame.packet());
         show("Ethernet frame", &payload);
+        database.borrow_mut().push(payload.clone(), label);
         Self::send_frame(&payload, &interface);
     }
 
@@ -287,13 +275,17 @@ pub struct MainWindow {
 impl MainWindow {
     pub(crate) fn new(app: &gtk::Application) -> Self {
         let widgets = Rc::new(RefCell::new(MainWindowWidgets::new()));
+        let database = Rc::new(RefCell::new(Database::new()));
+
+        let database_ui = Database::get_ui_section(widgets.clone(), database.clone());
 
         let button = gtk::Button::with_label("Collect");
-        let ui = widgets.borrow().generate_ui(&button);
+        let ui = widgets.borrow().generate_ui(&button, &database_ui);
 
         let clone = widgets.clone();
+        let database_clone = database.clone();
         button.connect_clicked(move |_| {
-            MainWindowWidgets::build_packet(clone.clone());
+            MainWindowWidgets::build_packet(clone.clone(), database_clone.clone());
         });
 
         let window = gtk::ApplicationWindow::builder()
