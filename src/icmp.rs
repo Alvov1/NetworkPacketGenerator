@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::net::Ipv4Addr;
 use std::rc::Rc;
 use gtk::prelude::*;
 use pnet::packet::Packet;
@@ -9,7 +8,6 @@ use pnet::packet::icmp::MutableIcmpPacket;
 use pnet::packet::ip::IpNextHeaderProtocol;
 use crate::database::Database;
 
-use crate::udp::UdpOptions;
 use crate::error_window::error;
 use crate::show_packet::show;
 use crate::widgets::MainWindowWidgets;

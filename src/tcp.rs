@@ -1,5 +1,6 @@
 use gtk::prelude::*;
 
+use rand::Rng;
 use std::net::Ipv4Addr;
 use pnet::packet::Packet;
 use pnet::packet::FromPacket;
@@ -23,7 +24,7 @@ pub(crate) struct TCPWidgets {
     /* ACK SYN PSH FIN RST URG ECE CWR */
     flags: (gtk::CheckButton, gtk::CheckButton, gtk::CheckButton,
             gtk::CheckButton, gtk::CheckButton, gtk::CheckButton,
-            gtk::CheckButton, gtk::CheckButton),
+            gtk::CheckButton, gtk::CheckButton, gtk::CheckButton),
 
     data: gtk::Entry,
 
@@ -34,7 +35,7 @@ pub(crate) struct TCPWidgets {
 impl TCPWidgets {
     pub(crate) fn new() -> Self {
         Self {
-            source_port: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Port").text("8888").build()),
+            source_port: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Port").build()),
             dest_port: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Port").build()),
             sequence_number: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Sequence number").build()),
             acknowledgement: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Acknowledgement").build()),
@@ -43,7 +44,8 @@ impl TCPWidgets {
             checksum: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Checksum").build()),
             urgent: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Urgent pointer").build()),
 
-            flags: (gtk::CheckButton::with_label("ACK"), gtk::CheckButton::with_label("SYN"),
+            flags: (gtk::CheckButton::builder().label("NS (AE)").halign(gtk::Align::Center).build(),
+                    gtk::CheckButton::with_label("ACK"), gtk::CheckButton::with_label("SYN"),
                     gtk::CheckButton::with_label("PSH"), gtk::CheckButton::with_label("FIN"),
                     gtk::CheckButton::with_label("RST"), gtk::CheckButton::with_label("URG"),
                     gtk::CheckButton::with_label("ECE"), gtk::CheckButton::with_label("CWR")),
@@ -166,21 +168,30 @@ impl TCPWidgets {
             /* Right grid */ {
                 /* Right grid with flags. */
                 let right_inner_grid = gtk::Grid::builder().halign(gtk::Align::Center)
-                    .valign(gtk::Align::Center).row_spacing(24).column_spacing(24).build();
+                    .valign(gtk::Align::Center).row_spacing(16).column_spacing(24).build();
 
                 /* Right grid buttons */ {
-                    right_inner_grid.attach(&self.flags.0, 0, 0, 1, 1);
-                    right_inner_grid.attach(&self.flags.1, 1, 0, 1, 1);
-                    right_inner_grid.attach(&self.flags.2, 0, 1, 1, 1);
-                    right_inner_grid.attach(&self.flags.3, 1, 1, 1, 1);
-                    right_inner_grid.attach(&self.flags.4, 0, 2, 1, 1);
-                    right_inner_grid.attach(&self.flags.5, 1, 2, 1, 1);
-                    right_inner_grid.attach(&self.flags.6, 0, 3, 1, 1);
-                    right_inner_grid.attach(&self.flags.7, 1, 3, 1, 1);
+                    right_inner_grid.attach(&self.flags.1, 0, 0, 1, 1);
+                    right_inner_grid.attach(&self.flags.2, 1, 0, 1, 1);
+                    right_inner_grid.attach(&self.flags.3, 0, 1, 1, 1);
+                    right_inner_grid.attach(&self.flags.4, 1, 1, 1, 1);
+                    right_inner_grid.attach(&self.flags.5, 0, 2, 1, 1);
+                    right_inner_grid.attach(&self.flags.6, 1, 2, 1, 1);
+                    right_inner_grid.attach(&self.flags.7, 0, 3, 1, 1);
+                    right_inner_grid.attach(&self.flags.8, 1, 3, 1, 1);
                 }
 
+                let right_inner_box = gtk::Box::builder()
+                    .orientation(gtk::Orientation::Vertical)
+                    .spacing(16)
+                    .halign(gtk::Align::Center)
+                    .valign(gtk::Align::Center)
+                    .build();
+                right_inner_box.append(&right_inner_grid);
+                right_inner_box.append(&self.flags.0);
+
                 /* Right grid frame with flags check buttons. */
-                let right_frame = gtk::Frame::builder().label("Flags").child(&right_inner_grid).build();
+                let right_frame = gtk::Frame::builder().label("Flags").child(&right_inner_box).build();
 
                 upper_box.append(&right_frame);
             }
@@ -229,15 +240,16 @@ impl TCPWidgets {
     fn get_flags(&self) -> u16 {
         let mut result = 0u16;
 
-        /* ACK SYN PSH FIN RST URG ECE CWR */
-        if self.flags.0.is_active() { result |= pnet::packet::tcp::TcpFlags::ACK; }
-        if self.flags.1.is_active() { result |= pnet::packet::tcp::TcpFlags::SYN; }
-        if self.flags.2.is_active() { result |= pnet::packet::tcp::TcpFlags::PSH; }
-        if self.flags.3.is_active() { result |= pnet::packet::tcp::TcpFlags::FIN; }
-        if self.flags.4.is_active() { result |= pnet::packet::tcp::TcpFlags::RST; }
-        if self.flags.5.is_active() { result |= pnet::packet::tcp::TcpFlags::URG; }
-        if self.flags.6.is_active() { result |= pnet::packet::tcp::TcpFlags::ECE; }
-        if self.flags.7.is_active() { result |= pnet::packet::tcp::TcpFlags::CWR; }
+        /* NS ACK SYN PSH FIN RST URG ECE CWR */
+        if self.flags.0.is_active() { result |= pnet::packet::tcp::TcpFlags::NS; }
+        if self.flags.1.is_active() { result |= pnet::packet::tcp::TcpFlags::ACK; }
+        if self.flags.2.is_active() { result |= pnet::packet::tcp::TcpFlags::SYN; }
+        if self.flags.3.is_active() { result |= pnet::packet::tcp::TcpFlags::PSH; }
+        if self.flags.4.is_active() { result |= pnet::packet::tcp::TcpFlags::FIN; }
+        if self.flags.5.is_active() { result |= pnet::packet::tcp::TcpFlags::RST; }
+        if self.flags.6.is_active() { result |= pnet::packet::tcp::TcpFlags::URG; }
+        if self.flags.7.is_active() { result |= pnet::packet::tcp::TcpFlags::ECE; }
+        if self.flags.8.is_active() { result |= pnet::packet::tcp::TcpFlags::CWR; }
 
         result
     }
@@ -292,7 +304,8 @@ impl TCPWidgets {
         packet.set_payload(self.data.text().as_bytes());
 
         if self.source_port.0.is_active() {
-            packet.set_source(0)
+            let mut rng = rand::thread_rng();
+            packet.set_source(rng.gen_range(49152..65535));
         } else {
             match self.source_port.1.text().parse::<u16>() {
                 Ok(value) => packet.set_source(value),
@@ -301,7 +314,8 @@ impl TCPWidgets {
         }
 
         if self.dest_port.0.is_active() {
-            packet.set_destination(0)
+            let mut rng = rand::thread_rng();
+            packet.set_destination(rng.gen_range(49152..65535));
         } else {
             match self.dest_port.1.text().parse::<u16>() {
                 Ok(value) => packet.set_destination(value),

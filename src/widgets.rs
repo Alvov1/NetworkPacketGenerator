@@ -2,7 +2,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
 
 use gtk::prelude::*;
 use pnet::datalink;
@@ -37,7 +36,6 @@ impl NetworkInterfaceWidget {
         for name in names { interfaces.push(name.to_string()); }
         Self { list, interfaces }
     }
-    fn set_active(&self, value: u32) { self.list.set_selected(value); }
     pub(crate) fn get_active(&self) -> String { self.interfaces[self.list.selected() as usize].clone() }
 }
 
@@ -47,22 +45,20 @@ struct MacAddressesWidgets {
 }
 impl MacAddressesWidgets {
     fn new(mac_address: Result<Option<MacAddress>, MacAddressError>) -> MacAddressesWidgets {
-        match mac_address {
+        let source = match mac_address {
             Ok(Some(address)) => {
                 let mut address_string = String::new();
                 address_string += &format!("{:2x}", address.bytes()[0]);
                 for byte in &address.bytes()[1..] {
                     address_string += &*(".".to_string() + &format!("{:2x}", byte));
                 }
-                Self {
-                    source: gtk::Entry::builder().placeholder_text("Source MAC").text(&address_string).build(),
-                    destination: gtk::Entry::builder().placeholder_text("Destination MAC").text(&address_string).build(),
-                }
+                gtk::Entry::builder().placeholder_text("Source MAC").text(&address_string).build()
             },
-            _ => Self {
-                source: gtk::Entry::builder().placeholder_text("Source MAC").text("96:61:fc:c4:e6:f9").build(),
-                destination: gtk::Entry::builder().placeholder_text("Destination MAC").text("96:61:fc:c4:e6:f9").build()
-            }
+            _ => gtk::Entry::builder().placeholder_text("Source MAC").text("aa.bb.cc.dd.ee.ff").build()
+        };
+        Self {
+            source,
+            destination: gtk::Entry::builder().placeholder_text("Destination MAC").text("aa.bb.cc.dd.ee.ff").build(),
         }
     }
     fn get(&self) -> Option<(MacAddr, MacAddr)> {
@@ -192,12 +188,7 @@ impl MainWindowWidgets {
         }
     }
     fn build_icmp_packet(widgets: Rc<RefCell<MainWindowWidgets>>, database: Rc<RefCell<Database>>) {
-        let addresses = match widgets.clone().borrow().ip_widgets.get_addresses() {
-            Some(addresses) => addresses,
-            None => { error("Bad src or destination IP address value."); return }
-        };
-
-        IcmpOptions::show_window(widgets.clone(), database);
+        IcmpOptions::show_window(widgets, database);
     }
     fn build_udp_packet(widgets: Rc<RefCell<MainWindowWidgets>>, database: Rc<RefCell<Database>>) {
         let addresses = match widgets.clone().borrow().ip_widgets.get_addresses() {
@@ -255,14 +246,14 @@ impl MainWindowWidgets {
             .next()
             .unwrap();
 
-        let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {
+        let (mut tx, _) = match datalink::channel(&interface, Default::default()) {
             Ok(Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => panic!("Unhandled channel type."),
-            Err(e) => panic!("Failed to create datalink channel."),
+            Err(_) => panic!("Failed to create datalink channel."),
         };
 
         match tx.send_to(&payload, None) {
-            Some(info) => {},
+            Some(_) => {},
             None => { error("Failed to send packet."); return }
         }
     }

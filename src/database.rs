@@ -1,6 +1,5 @@
 use std::cell::RefCell;
-use std::collections::LinkedList;
-use std::path::Path;
+use std::ops::RangeInclusive;
 use std::rc::Rc;
 use gtk::prelude::{BoxExt, ButtonExt, DialogExt, EditableExt, GtkWindowExt, WidgetExt};
 use pnet::datalink;
@@ -11,30 +10,25 @@ use crate::widgets::MainWindowWidgets;
 
 struct StoredPacket {
     widget: gtk::Box,
-    packet: Vec<u8>,
-    index: usize
+    packet: Vec<u8>
 }
 impl StoredPacket {
     pub(crate) fn new(payload: Vec<u8>, label: &str, index: usize) -> StoredPacket {
         let full_label = gtk::Label::new(Some(&(index.to_string() + " " + label)));
-        let image = gtk::Image::from_file(&Path::new("application-import-3.png"));
+        let image = gtk::Image::from_file("packet_icon.png");
 
         let widget = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(5)
             .margin_start(5)
             .margin_end(5)
-            .margin_top(5)
-            .margin_bottom(5)
+            .margin_top(10)
+            .margin_bottom(10)
             .build();
         widget.append(&image);
         widget.append(&full_label);
 
-        Self {
-            widget,
-            packet: payload,
-            index
-        }
+        Self {  widget,  packet: payload  }
     }
 }
 
@@ -45,7 +39,7 @@ pub(crate) struct Database {
 impl Database {
     pub(crate) fn new() -> Database {
         Self {
-            list: gtk::Box::new(gtk::Orientation::Horizontal, 20),
+            list: gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(20).build(),
             packets: Vec::new()
         }
     }
@@ -56,7 +50,7 @@ impl Database {
         self.packets.push(item);
     }
 
-    pub(crate) fn send(&self, range: std::ops::Range<usize>, iface: &str) {
+    pub(crate) fn send_range(&self, range: RangeInclusive<usize>, iface: &str) {
         let interfaces = datalink::interfaces();
         let interface = interfaces.into_iter()
             .filter(|interface: &NetworkInterface| {
@@ -65,10 +59,10 @@ impl Database {
             .next()
             .unwrap();
 
-        let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {
+        let (mut tx, _) = match datalink::channel(&interface, Default::default()) {
             Ok(Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => panic!("Unhandled channel type."),
-            Err(e) => panic!("Failed to create datalink channel."),
+            Err(_) => panic!("Failed to create datalink channel."),
         };
 
         for i in range {
@@ -79,7 +73,39 @@ impl Database {
 
             let packet = &self.packets[i];
             match tx.send_to(&packet.packet, None) {
-                Some(info) => {}
+                Some(_) => {}
+                None => {
+                    error(&("Failed to send packet ".to_owned() + &i.to_string()));
+                    return;
+                }
+            }
+        }
+    }
+
+    pub(crate) fn send_multiple_times(&self, index: usize, amount: usize, iface: &str) {
+        let interfaces = datalink::interfaces();
+        let interface = interfaces.into_iter()
+            .filter(|interface: &NetworkInterface| {
+                interface.name == iface
+            })
+            .next()
+            .unwrap();
+
+        let (mut tx, _) = match datalink::channel(&interface, Default::default()) {
+            Ok(Ethernet(tx, rx)) => (tx, rx),
+            Ok(_) => panic!("Unhandled channel type."),
+            Err(_) => panic!("Failed to create datalink channel."),
+        };
+
+        if index > self.packets.len() {
+            error("Bad packet number in the queue.");
+            return;
+        }
+
+        let packet = &self.packets[index];
+        for i in 0..amount {
+            match tx.send_to(&packet.packet, None) {
+                Some(_) => {}
                 None => {
                     error(&("Failed to send packet ".to_owned() + &i.to_string()));
                     return;
@@ -97,7 +123,6 @@ impl Database {
             .hscrollbar_policy(gtk::PolicyType::Always) // Disable horizontal scrolling
             .vscrollbar_policy(gtk::PolicyType::Never)
             .child(&database.borrow().list)
-            .max_content_height(40)
             .min_content_width(360)
             .margin_start(5)
             .margin_end(5)
@@ -130,25 +155,38 @@ impl Database {
             dialog.connect_response(move |dialog, response| {
                 match response {
                     gtk::ResponseType::Ok => {
-                        let indexes: Vec<_> = entry.text().to_string().split("-").map(|v| v.parse::<isize>().unwrap_or(-1)).collect();
-                        if indexes.len() == 1 {
-                            match indexes[0] {
-                                -1 => { error("Bad packets sequence"); },
-                                _ => {
-                                    let iface = widgets_clone.borrow().get_active_interface();
-                                    database_clone.borrow().send(indexes[0] as usize..indexes[0] as usize + 1, &iface);
+                        if entry.text().contains("-") {
+                            let indexes: Vec<_> = entry.text().to_string().split("-").map(|v| v.parse::<isize>().unwrap_or(-1)).collect();
+                            if indexes.len() == 1 {
+                                match indexes[0] {
+                                    -1 => { error("Bad packets sequence"); }
+                                    _ => {
+                                        let iface = widgets_clone.borrow().get_active_interface();
+                                        database_clone.borrow().send_range(RangeInclusive::new(indexes[0] as usize, indexes[0] as usize), &iface);
+                                    }
                                 }
+                                dialog.close();
+                                return;
                             }
-                            dialog.close(); return;
+
+                            if indexes.len() != 2 || indexes[0] == -1 || indexes[1] == -1 || indexes[0] >= indexes[1] {
+                                error("Bad packet sequence. Please enter two numbers separated by '*' or '-'");
+                                dialog.close();
+                            }
+
+                            let iface = widgets_clone.borrow().get_active_interface();
+                            database_clone.borrow().send_range(RangeInclusive::new(indexes[0] as usize, indexes[1] as usize), &iface);
                         }
 
-                        if indexes.len() != 2 || indexes[0] == -1 || indexes[1] == -1 || indexes[0] >= indexes[1] {
-                            error("Bad packet sequence. Please enter two numbers separated by '-'");
-                            dialog.close();
+                        if entry.text().contains("*") {
+                            let indexes: Vec<_> = entry.text().to_string().split("*").map(|v| v.parse::<usize>().unwrap_or(0)).collect();
+                            if indexes.len() != 2 {
+                                error("Bad packet sequence. Please enter two numbers separated by '*' or '-'");
+                                dialog.close();
+                            }
+                            let iface = widgets_clone.borrow().get_active_interface();
+                            database_clone.borrow().send_multiple_times(indexes[0] as usize, indexes[1] as usize, &iface);
                         }
-
-                        let iface = widgets_clone.borrow().get_active_interface();
-                        database_clone.borrow().send(indexes[0] as usize..indexes[1] as usize, &iface);
                         dialog.close();
                     },
                     gtk::ResponseType::Cancel => {

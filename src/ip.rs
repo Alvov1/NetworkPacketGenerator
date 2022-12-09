@@ -35,8 +35,8 @@ pub(crate) struct IPWidgets {
 impl IPWidgets {
     pub(crate) fn new() -> Self {
         Self {
-            src_ip: gtk::Entry::builder().placeholder_text("Source IPv4").text("192.168.31.160").build(),
-            dest_ip: gtk::Entry::builder().placeholder_text("Destination IPv4").text("192.168.31.150").build(),
+            src_ip: gtk::Entry::builder().placeholder_text("Source IPv4").build(),
+            dest_ip: gtk::Entry::builder().placeholder_text("Destination IPv4").build(),
 
             version: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Version").build()),
             header_length: (gtk::CheckButton::builder().label("Auto").active(true).build(), gtk::Entry::builder().placeholder_text("Header length").build()),
@@ -338,9 +338,6 @@ impl IPWidgets {
         };
 
         Some((src, dest))
-    }
-    pub(crate) fn build_empty(&self, next_protocol: IpNextHeaderProtocol) -> Option<Vec<u8>> {
-        return self.build_packet(next_protocol, &Vec::new());
     }
     pub(crate) fn build_packet(&self, next_protocol: IpNextHeaderProtocol, data: &[u8]) -> Option<Vec<u8>> {
         let options = match self.get_options() {

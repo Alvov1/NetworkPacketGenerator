@@ -88,8 +88,8 @@ impl UdpOptions {
     
     pub(crate) fn new() -> UdpOptions {
         UdpOptions {
-            src_port: gtk::Entry::builder().placeholder_text("Port..").text("1234").build(),
-            dest_port: gtk::Entry::builder().placeholder_text("Port..").text("1234").build(),
+            src_port: gtk::Entry::builder().placeholder_text("Port..").build(),
+            dest_port: gtk::Entry::builder().placeholder_text("Port..").build(),
             length: gtk::Entry::builder().placeholder_text("Length..").build(),
             checksum: gtk::Entry::builder().placeholder_text("Checksum..").build(),
             data: gtk::Entry::builder().placeholder_text("Data..").build()
